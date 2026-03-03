@@ -1,0 +1,428 @@
+================================================================================
+ INVENTORY MANAGER — PROJECT RECAP (v4.0)
+================================================================================
+
+OVERVIEW:
+  A web-based inventory management system with AI assistant, built on
+  Supabase (PostgreSQL + Auth + Edge Functions + RLS). Users can sign up,
+  create their own inventory categories with custom fields, manage items,
+  and customize the app's appearance. An AI chat assistant (Claude) can
+  perform all operations through natural language.
+
+  A Flutter Android app rough draft is also included for mobile access
+  via the same AI chat interface.
+
+SUPABASE CONFIG:
+  URL:      https://masngvxdbxqrrreszjxv.supabase.co
+  Anon Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+  (Full key in source files)
+  Edge function JWT enforcement: ON (recommended as of v4.0)
+  Note: JWT "invalid JWT" errors were caused by getSession() returning a stale
+        cached token. Fixed in v4.0 by switching to refreshSession() in
+        ai-assistant.js, which always fetches a fresh token before each request.
+
+TECH STACK:
+  Frontend:   Vanilla JS + React (Babel transpiler for inventory page)
+  Backend:    Supabase (PostgreSQL, Auth, Edge Functions, RLS)
+  AI:         Claude claude-haiku-4-5-20251001 via Anthropic API (tool-use loop in edge function)
+              IMPORTANT: Always use claude-haiku-4-5-20251001 in smart-api-v4.ts.
+              claude-haiku-4-6 does NOT exist and will cause a 404 error.
+  Mobile:     Flutter (rough draft)
+  Styling:    CSS Custom Properties for theming, localStorage for persistence
+
+================================================================================
+ FILE STRUCTURE
+================================================================================
+
+  landing.html              — Login/signup page (Supabase Auth)
+  index.html                — Dashboard: category cards, search, sort, create, Export All
+  inventory.html            — Item management (React): sort, search, CRUD, Export CSV, Import CSV
+  settings.html             — Profile, theme presets + custom colors, category management
+  sidebar.js                — Shared sidebar nav, auth guard, theme loader, token refresh listener
+  ai-assistant-v4.js        — Floating AI chat widget (uses refreshSession() for fresh JWT)
+  smart-api-v4.ts           — Edge function: Claude AI + 13 tools + direct tool_call mode
+  inventory-setup-v4.sql    — SINGLE SOURCE OF TRUTH: full DB schema, RLS, triggers, seed data
+                              (replaces both sql-setup.sql and migration-fix-isolation.sql)
+
+  flutter_app/              — Flutter Android full-featured mobile companion
+    pubspec.yaml
+    lib/main.dart                          — themeNotifier, loadThemeFromSupabase()
+    lib/models/theme_settings.dart         — ThemeSettings model + 6 presets
+    lib/services/supabase_service.dart     — direct DB queries (categories, items, ui_settings)
+    lib/services/api_service.dart          — edge function calls, refreshSession() JWT
+    lib/screens/login_screen.dart          — email/password auth + signup
+    lib/screens/chat_screen.dart           — AI chat, drawer, voice input, TTS, stop button
+    lib/screens/settings_screen.dart       — Appearance tab + Profile tab (incl. password change)
+    lib/screens/category_screen.dart       — item CRUD + CSV export
+
+  RETIRED FILES (do not use):
+    sql-setup.sql               — superseded by inventory-setup-v4.sql
+    migration-fix-isolation.sql — superseded by inventory-setup-v4.sql
+    smart-api-upgraded.ts       — superseded by smart-api-v4.ts
+    ai-assistant.js             — superseded by ai-assistant-v4.js
+
+================================================================================
+ ARCHITECTURE
+================================================================================
+
+  AUTH FLOW:
+    1. landing.html → Supabase signInWithPassword / signUp
+    2. On success → redirect to index.html
+    3. sidebar.js loads on every page, checks auth, redirects to landing.html if no session
+    4. sidebar.js creates window.db (Supabase client), stores session/profile on window
+    5. sidebar.js registers onAuthStateChange to keep window.currentSession live
+    6. ai-assistant-v4.js calls window.db.auth.refreshSession() before every request
+       (KEY: refreshSession() guarantees a fresh JWT; getSession() was returning stale tokens)
+
+  SIDEBAR (sidebar.js):
+    - Self-executing IIFE injected into every page via <script src="sidebar.js">
+    - Creates Supabase client (window.db)
+    - Auth guard: redirects to landing.html if no session
+    - Registers onAuthStateChange listener → updates window.currentSession on token refresh
+    - Loads user profile from profiles table
+    - Loads categories from table_definitions
+    - Injects fixed 260px dark sidebar on desktop, hamburger menu on mobile
+    - Applies theme from localStorage (inv_theme key)
+    - Dispatches 'sidebar-ready' custom event when done
+
+  THEME SYSTEM:
+    - localStorage-first: theme stored in inv_theme key as JSON
+    - Inline <script> in <head> applies CSS vars BEFORE render (prevents FOUC)
+    - sidebar.js also applies theme as fallback
+    - 20+ CSS custom properties for colors, sizing, spacing
+    - Settings page has 6 presets + custom color pickers with live preview
+
+  MULTI-USER / DATA ISOLATION (v4.0 — hardened):
+    - Supabase Auth for real user accounts
+    - profiles table auto-created via trigger on auth.users INSERT
+    - table_definitions: user_id is NOT NULL (DB-level enforcement, no NULL rows possible)
+      UNIQUE(table_name, user_id) — two users can each have their own "toners" table
+      RLS: NULL-safe policies (auth.uid() IS NOT NULL AND user_id = auth.uid())
+    - field_definitions: SELECT scoped via ownership JOIN to table_definitions
+      INSERT/UPDATE/DELETE locked to service role only (edge function adminDb)
+    - ui_settings: user_id NOT NULL, UNIQUE(key, user_id), NULL-safe RLS
+    - Dynamic item tables: NULL-safe RLS on all four operations
+    - Default UI settings auto-seeded per-user on signup via DB trigger
+    - Edge function fire-and-forgets seed_default_ui_settings() on every request
+      as a safety net for users created before the v4.0 migration
+    - sanitizeTableName() in edge function prevents SQL injection in DDL
+
+  EDGE FUNCTION (smart-api-v4.ts) — v4.0:
+    - JWT enforcement: ON (set in Supabase Dashboard)
+    - Token validation: adminDb.auth.getUser(token) → 401 if invalid/expired
+    - Two Supabase clients:
+        adminDb — service role key, DDL + field_definitions writes, bypasses RLS
+        userDb  — user JWT in Authorization header, all DML, RLS scopes to auth.uid()
+    - assertOwnership() helper: called before every item read/write to verify the
+      requesting user owns the target table via RLS-scoped userDb query
+    - sanitizeTableName(): strips non [a-z0-9_] chars from table names before DDL
+    - DIRECT TOOL CALL MODE: { tool_call: { name, input } } bypasses AI loop
+    - AI MODE: Claude tool-use loop (up to 8 iterations)
+    - 13 tools:
+        list_categories  — userDb, RLS auto-scopes to user
+        get_items        — ownership check + userDb RLS
+        get_fields       — ownership check + userDb RLS (field_definitions SELECT policy
+                           also enforces ownership via JOIN)
+        create_category  — userDb for table_definitions, adminDb for DDL + field_definitions
+        rename_category  — userDb (RLS enforces ownership)
+        delete_category  — ownership check via userDb, adminDb for DROP TABLE
+        add_field        — ownership check via userDb, adminDb for ALTER TABLE
+        upsert_item      — ownership check + userDb, explicit user_id stamp on INSERT
+        delete_item      — ownership check + userDb RLS
+        run_sql          — adminDb (advanced use only)
+        get_ui_settings  — userDb, RLS scopes to user
+        set_ui_setting   — userDb, upserts with (key, user_id) composite key
+        set_layout       — userDb, upserts with (key, user_id) composite key
+
+  AI ASSISTANT (ai-assistant-v4.js):
+    - Floating chat widget (bottom-right corner, ✨ button)
+    - Calls window.db.auth.refreshSession() before each message (guarantees fresh JWT)
+    - Falls back to getSession() if refresh fails, then to cached window.currentSession
+    - Shows clear "session expired" message if no token available (instead of cryptic error)
+    - Sends page context (current page, table name) with every request
+    - Triggers refresh events on data changes (ai-refresh, loadInventoryCards)
+
+  EXPORT / IMPORT:
+    - inventory.html: "⬇ Export CSV" downloads current table as Google Sheets-compatible CSV
+        CSV format: #fields: mapping row, display name header, then data rows
+        BOM included for correct UTF-8 in Excel / Google Sheets
+    - inventory.html: "⬆ Import CSV" uploads a CSV, matches columns by field name or
+        display name (case-insensitive), inserts rows with user_id, reports results
+    - index.html: "⬇ Export All" loops through all user categories, downloads one CSV
+        per category with 400ms delay between downloads
+
+================================================================================
+ DATABASE SCHEMA
+================================================================================
+
+  profiles:
+    id (uuid PK, FK auth.users ON DELETE CASCADE)
+    display_name, email, role, created_at
+    RLS: SELECT/UPDATE/INSERT scoped to auth.uid() = id (NULL-safe)
+
+  table_definitions:
+    id (uuid PK), table_name (text NOT NULL), display_name, icon
+    user_id (uuid NOT NULL, FK auth.users ON DELETE CASCADE)
+    created_at
+    UNIQUE (table_name, user_id)
+    RLS: NULL-safe SELECT/INSERT/UPDATE/DELETE scoped to auth.uid() = user_id
+
+  field_definitions:
+    id (uuid PK), table_name (FK → table_definitions), field_name,
+    display_name, field_type, required, sort_order, created_at
+    UNIQUE (table_name, field_name)
+    RLS SELECT: EXISTS (SELECT 1 FROM table_definitions WHERE table_name = ... AND user_id = auth.uid())
+    RLS INSERT/UPDATE/DELETE: service role only (WITH CHECK (false) for user role)
+
+  ui_settings:
+    id (uuid PK), key (text NOT NULL), user_id (uuid NOT NULL, FK auth.users ON DELETE CASCADE)
+    value, updated_at
+    UNIQUE (key, user_id)
+    RLS: NULL-safe SELECT/INSERT/UPDATE/DELETE scoped to auth.uid() = user_id
+
+  Dynamic item tables (e.g. toners, monitors):
+    id (uuid PK DEFAULT gen_random_uuid())
+    user_id (uuid NOT NULL)  — no DEFAULT auth.uid() to avoid silent null inserts
+    created_at (timestamptz DEFAULT now())
+    ...custom fields (text / numeric / date)
+    RLS: NULL-safe per-user policies on SELECT/INSERT/UPDATE/DELETE
+
+  Helper functions:
+    exec_sql(sql text) → jsonb
+      SECURITY DEFINER, EXECUTE granted to service_role only
+      Used by edge function adminDb for all DDL (CREATE/DROP/ALTER TABLE, policies)
+
+    seed_default_ui_settings(target_user_id uuid) → void
+      SECURITY DEFINER, EXECUTE granted to service_role only
+      Inserts 26 default ui_settings rows for a user (ON CONFLICT DO NOTHING)
+      Called by on_auth_user_created trigger and fire-and-forget in edge function
+
+  Triggers:
+    on_auth_user_created → handle_new_user()
+      Fires AFTER INSERT ON auth.users
+      Creates profile row + seeds default UI settings for every new signup
+
+================================================================================
+ DEPLOY / SETUP STEPS
+================================================================================
+
+  Fresh install:
+    1. Run inventory-setup-v4.sql in Supabase SQL Editor
+       (Creates all tables, RLS, triggers, helper functions, seeds defaults)
+    2. Deploy smart-api-v4.ts as edge function named "smart-api"
+       - Add secret: ANTHROPIC_API_KEY = sk-ant-...
+       - SUPABASE_SERVICE_ROLE_KEY is auto-injected by Supabase
+       - Set JWT enforcement: ON
+    3. Host HTML/JS files on any static host (Supabase Storage, Netlify, etc.)
+       Make sure to use ai-assistant-v4.js (not the old ai-assistant.js)
+    4. For Flutter: open flutter_app/ in Android Studio, run flutter pub get
+
+  Re-deploy edge function:
+    Supabase Dashboard → Edge Functions → smart-api → Edit → paste → Deploy
+
+  Migrating from v3.x:
+    1. Run inventory-setup-v4.sql (safe to run on existing DB — uses IF NOT EXISTS,
+       DROP POLICY IF EXISTS, ON CONFLICT DO NOTHING throughout)
+       The migration block at the bottom claims any orphaned data for yjturetsky@gmail.com
+    2. Swap smart-api-upgraded.ts → smart-api-v4.ts (redeploy edge function)
+    3. Swap ai-assistant.js → ai-assistant-v4.js in all HTML pages
+    4. Set JWT enforcement: ON in Supabase Dashboard → Edge Functions → smart-api
+
+  Token / auth troubleshooting:
+    - "Invalid JWT" errors: caused by getSession() returning a cached stale token.
+      Fixed in v4.0: ai-assistant-v4.js uses refreshSession() instead.
+    - If users see "session expired" messages, ensure sidebar.js onAuthStateChange
+      listener is registering correctly and window.db is initialized before
+      ai-assistant-v4.js runs.
+    - JWT enforcement ON is now the correct setting. The function validates via
+      adminDb.auth.getUser(token) as a second layer.
+
+================================================================================
+ KNOWN ISSUES / PENDING
+================================================================================
+
+  - login.html (old file) uses hardcoded credentials — not connected to Supabase Auth.
+    Use landing.html instead for real authentication.
+
+================================================================================
+ RECENT CHANGES (2026-03-02)
+================================================================================
+
+  settings.html, index.html, inventory.html, sidebar.js — Sidebar now changes
+  color with theme:
+    - Each preset now defines matching sidebar colors (sidebarBg, sidebarHeader,
+      sidebarText, sidebarTitle) derived from the preset's palette.
+    - applyPreset() now applies those 4 sidebar CSS vars live and saves them.
+    - Inline <head> scripts in all 3 HTML pages now include sidebar_* keys so
+      the correct sidebar colors load from localStorage immediately on every page.
+    - sidebar.js colorMap already included sidebar_* keys, applied before render.
+    - Color pickers in Settings → sidebar section remain fully functional for
+      per-color overrides beyond the presets.
+
+  sidebar.js — Fixed duplicate logo in sidebar header:
+    - Previously, `buildSidebar()` header could show TWO box/icon shapes
+      (one emoji in the title text + one from another source).
+    - Fix: extracted leading emoji from app_name into window.appLogo;
+      sidebar header now renders either:
+        (a) <div class="sidebar-logo">{emoji}</div> + <div class="sidebar-title">{text}</div>
+        (b) <div class="sidebar-title">{text}</div>  — if app_name has no leading emoji
+      Guarantees exactly ONE logo element (or none), never two.
+
+================================================================================
+ RECENT CHANGES (2026-03-02, session 2)
+================================================================================
+
+  sidebar.js — Contrast + hardcoded nav color fixes:
+    - nav-item hover color: hardcoded #cbd5e1 → var(--clr-sidebar-title)
+    - nav-item.active background: rgba(102,126,234,0.15) → rgba(255,255,255,0.12)
+      (theme-neutral; old value produced a purple blob on non-purple presets)
+    - nav-section color: hardcoded #64748b → var(--clr-sidebar-text) + opacity: 0.65
+    - user-email color: hardcoded #64748b → var(--clr-sidebar-text) + opacity: 0.75
+    - hamburger-btn color: hardcoded #f1f5f9 → var(--clr-sidebar-title)
+    - Dark Mode preset sidebarText fixed: #64748b → #94a3b8 (was below WCAG AA 4.5:1
+      contrast ratio on the #0f172a background)
+
+  sidebar.js — Font size slider now works (rem units throughout):
+    - Added --font-base: 15px to :root defaults in injected CSS
+    - Added html { font-size: var(--font-base); } to injected CSS so rem units
+      cascade from the slider value across all pages
+    - Converted ALL sidebar font sizes from px to rem:
+        sidebar-title: 16px → 1.07rem
+        nav-item: 14px → 0.93rem
+        nav-icon: 18px → 1.2rem
+        nav-section: 11px → 0.73rem
+        user-avatar: 12px → 0.8rem
+        user-name: 13px → 0.87rem
+        user-email: 11px → 0.73rem
+        sidebar-logout-btn: 18px → 1.2rem
+        hamburger-btn: 20px → 1.33rem
+        mobile-title: 16px → 1.07rem
+
+  index.html, inventory.html — Font slider now scales main page content:
+    - Added/updated html { font-size: var(--font-base, 16px); } in page <style>
+    - Converted all major content element font-sizes from px to rem:
+        Page titles, subtitles, buttons, search/sort controls, inventory cards
+        (card icon, title, description, stats), form labels/inputs, modal headings,
+        item field labels/values, stats bar numbers
+    - Rem units mean all text scales proportionally when the font slider moves
+
+  ai-assistant-v4.js — AI chatbox now fully themed:
+    - Remaining hardcoded colors replaced with CSS custom property equivalents:
+        #ai-chat-panel background: #fff → var(--clr-card, #fff)
+        #ai-chat-messages background: #f8f8fc → var(--clr-bg, #f8f8fc)
+        .ai-msg background: #fff → var(--clr-card, #fff)
+        .ai-msg color: #333 → var(--clr-text, #333)
+        .typing-indicator background: #fff → var(--clr-card, #fff)
+        #ai-chat-input-area background: white → var(--clr-card, white)
+        #ai-chat-input-area border-top: #eee → rgba(0,0,0,0.1)
+        #ai-chat-input border: #e0e0e0 → rgba(0,0,0,0.12)
+        scrollbar thumb: #ddd → rgba(0,0,0,0.15)
+    - Combined with previous session's gradient/accent replacements, the full
+      chatbox (button, header, message bubbles, input, background) now adapts
+      to any active theme preset
+
+================================================================================
+ RECENT CHANGES (2026-03-02, Flutter expansion)
+================================================================================
+
+  Flutter app rebuilt from a 2-screen rough draft into a full mobile companion:
+
+  New packages added (pubspec.yaml):
+    speech_to_text ^7.0.0, flutter_tts ^4.0.0, share_plus ^10.0.0
+  Android permission added: RECORD_AUDIO
+
+  lib/main.dart:
+    - Global themeNotifier (ValueNotifier<ThemeSettings>)
+    - loadThemeFromSupabase() reads ui_settings and updates notifier live
+    - MaterialApp wrapped in ValueListenableBuilder for instant theme switching
+    - _buildTheme() helper: lerps all 6 Material 3 surface layers toward seed
+      color (3-12%) in light mode so chosen palette is actually visible
+
+  lib/models/theme_settings.dart (NEW):
+    - ThemeSettings class (seedColor + ThemeMode)
+    - kThemePresets: 6 presets matching web (Purple, Ocean, Forest, Sunset, Rose, Slate)
+
+  lib/services/supabase_service.dart (NEW):
+    - getCategories, getFieldDefinitions, getItems, upsertItem, deleteItem
+    - getUiSettings, setUiSetting (handles jsonb quoted-string values)
+
+  lib/services/api_service.dart:
+    - Fixed stale JWT: refreshSession() instead of currentSession
+    - Added concise: bool param — voice sends prepend "Reply in 1-2 sentences max."
+
+  lib/screens/chat_screen.dart:
+    - Navigation drawer: category list + app name/logo parsed from ui_settings
+      (leading emoji extracted same pattern as sidebar.js)
+    - Mic button: speech-to-text, auto-sends on final result (voice path only)
+    - TTS: AI speaks back only on voice-triggered responses (silent for typed)
+    - Stop button: replaces send button while speaking (red, Icons.stop_rounded)
+      tracked via flutter_tts start/completion/cancel handlers
+    - New Category sheet: emoji picker + name field, creates via AI (edge function)
+    - loadThemeFromSupabase() called after every AI response so AI-driven theme
+      changes (set_ui_setting) apply immediately without restart
+    - maxLines: 5 so Enter key submits reliably
+
+  lib/screens/settings_screen.dart (NEW):
+    - Appearance tab: Light/Dark/System segmented toggle + 6 color preset grid
+      changes apply live via themeNotifier + saved to ui_settings
+    - Profile tab: display name editor, email (read-only), sign out
+    - Password change section: new + confirm fields with show/hide toggle,
+      validates min 6 chars and match, calls updateUser(UserAttributes(password:))
+
+  lib/screens/category_screen.dart (NEW):
+    - Lists items for any category using dynamic field_definitions
+    - Add/edit items via bottom sheet form (field types: text, number, textarea)
+    - Delete with confirm dialog
+    - Export CSV via native share sheet (share_plus)
+
+================================================================================
+ RECENT CHANGES (2026-03-02, Flutter fixes)
+================================================================================
+
+  Fixed 4 Flutter issues:
+
+  lib/services/supabase_service.dart:
+    - Fix #11: getFieldDefinitions() used .order('field_order') which does not
+      exist. Corrected to .order('sort_order') — category screen no longer crashes.
+
+  lib/services/api_service.dart:
+    - Fix #10: sendMessage() now accepts List<Map<String,String>> history param.
+      When history is non-empty, prepends "[Previous conversation:\n...]" block
+      identical to the web client (ai-assistant-v4.js). Chat now has memory
+      between turns in the same session.
+    - New deleteCategory(String tableName) method — sends a natural-language
+      delete instruction to the edge function; used by Manage Categories sheet.
+
+  lib/screens/chat_screen.dart:
+    - Fix #10: _sendMessage() now builds history from _messages list (all msgs
+      except the just-added current one) and passes to ApiService.sendMessage().
+    - Fix #16: Drawer "New Category" tile → "Manage Categories" (Icons.category).
+      New _ManageCategoriesSheet widget: lists all categories with per-item
+      delete buttons + "New Category" FilledButton at bottom that opens the
+      existing _NewCategorySheet. Delete goes through ApiService.deleteCategory().
+
+  lib/screens/category_screen.dart + pubspec.yaml:
+    - Fix #13: Added file_picker ^8.0.0 dependency.
+      New _importCsv(fields) method: opens file picker for .csv files,
+      decodes UTF-8, parses quoted CSV (handles commas/quotes inside fields),
+      matches headers to field display_name or field_name (case-insensitive),
+      upserts each row via SupabaseService.upsertItem(), shows snackbar with count.
+      Added upload IconButton (Icons.upload) to AppBar beside existing share button.
+      Both import and export share one FutureBuilder wrapping both buttons.
+
+================================================================================
+ FUTURE IDEAS
+================================================================================
+
+  - Email confirmation flow (currently auto-confirms)
+  - Shared categories (invite other users to a category)
+  - Dashboard charts / analytics
+  - Push notifications for low stock
+  - Flutter: add category browsing, item management (not just AI chat)
+  - PWA support
+  - Image uploads for items
+  - Barcode scanner integration
+  - Remove run_sql tool from AI access (security hardening — AI shouldn't have
+    arbitrary SQL access in a multi-user system)
+
+================================================================================

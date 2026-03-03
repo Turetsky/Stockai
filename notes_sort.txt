@@ -1,0 +1,38 @@
+ISSUES & TASKS — SORTED
+================================================================
+
+[ APP ]
+1.  fix ai talk back
+9.  in app manage categories button
+10. AI memory
+11. categories tab opening issue
+13. export import feature
+16. Add categories to settings
+17. Banner issue
+18. Double icon issue
+3a. Add white mode to app (new — added during sort)
+
+[ WEB ]
+5.  Remove font size setting ✓ DONE
+
+[ BOTH — Web & App ]
+3.  Custom Theme Option (colors, presets, customization)
+4.  Add AI to the list of theme options
+8.  work on ai presets to make smarter use
+12. delete account in settings
+15. About page
+
+[ BACKEND ]
+6.  check on SQL switch in order to enforce multi user support
+14. Multi user support test
+
+[ BACKEND + WEB ]
+7.  check on keys
+
+[ FEATURE IDEA ]
+2.  Possible Chat History — track conversations/previous interactions in notes
+
+[ UNCERTAIN — revisit later ]
+19. Possible issue on a continued chat (web/app — not confirmed real yet)
+
+================================================================

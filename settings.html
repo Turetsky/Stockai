@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Inventory Manager</title>
+    <script>
+    (function(){try{var t=JSON.parse(localStorage.getItem('inv_theme')||'{}'),r=document.documentElement,m={primary_color_start:'--clr-start',primary_color_end:'--clr-end',header_text_color:'--clr-header-text',accent_color:'--clr-accent',bg_color:'--clr-bg',card_color:'--clr-card',card_radius:'--card-radius',text_primary_color:'--clr-text-primary',text_secondary_color:'--clr-text-secondary',item_card_bg:'--clr-item-card',stats_bar_bg:'--clr-stats-bar',low_stock_color:'--clr-low-stock',btn_add_bg:'--clr-btn-add',btn_edit_bg:'--clr-btn-edit',btn_del_bg:'--clr-btn-del',sidebar_bg:'--clr-sidebar-bg',sidebar_header:'--clr-sidebar-header',sidebar_text:'--clr-sidebar-text',sidebar_title:'--clr-sidebar-title'};for(var k in m)if(t[k])r.style.setProperty(m[k],t[k])}catch(e){}})();
+    </script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
+    <style>
+        :root {
+            --clr-start: #667eea;
+            --clr-end: #764ba2;
+            --clr-accent: #667eea;
+            --clr-bg: #f5f5f5;
+            --clr-card: #ffffff;
+            --card-radius: 12px;
+            --font-base: 15px;
+            --clr-text-primary: #222;
+            --clr-text-secondary: #666;
+            --clr-text-label: #aaa;
+            --shadow-sm: 0 2px 8px rgba(0,0,0,0.08);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.1);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--clr-bg);
+            font-size: var(--font-base);
+            color: var(--clr-text-primary);
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+        body.loaded { opacity: 1; }
+
+        .main-content {
+            padding: 24px 28px;
+            min-height: 100vh;
+            max-width: 800px;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 24px;
+        }
+
+        /* Tabs */
+        .settings-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 24px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .tab-btn {
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            background: none;
+            color: var(--clr-text-secondary);
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover { color: var(--clr-accent); }
+        .tab-btn.active {
+            color: var(--clr-accent);
+            border-bottom-color: var(--clr-accent);
+        }
+
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* Section card */
+        .section-card {
+            background: var(--clr-card);
+            border-radius: var(--card-radius);
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 20px;
+        }
+        .section-card h3 {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: var(--clr-text-primary);
+        }
+
+        /* Form elements */
+        .form-row {
+            margin-bottom: 16px;
+        }
+        .form-row label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 6px;
+        }
+        .form-row input[type="text"],
+        .form-row input[type="email"],
+        .form-row input[type="password"] {
+            width: 100%;
+            padding: 10px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            color: var(--clr-text-primary);
+            transition: border-color 0.2s;
+        }
+        .form-row input:focus {
+            outline: none;
+            border-color: var(--clr-accent);
+        }
+        .form-row input:disabled {
+            background: #f8f8f8;
+            color: #999;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--clr-start), var(--clr-end));
+            color: white;
+        }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-outline {
+            background: none;
+            border: 2px solid #e0e0e0;
+            color: var(--clr-text-primary);
+        }
+        .btn-outline:hover { border-color: var(--clr-accent); color: var(--clr-accent); }
+
+        .msg {
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-top: 12px;
+            display: none;
+        }
+        .msg.success { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+        .msg.error { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+        /* Theme presets */
+        .presets-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .preset-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .preset-card:hover { border-color: var(--clr-accent); transform: translateY(-2px); }
+        .preset-card.active { border-color: var(--clr-accent); box-shadow: 0 0 0 2px rgba(102,126,234,0.2); }
+        .preset-swatch {
+            width: 100%;
+            height: 40px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+        .preset-name {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        /* Color picker rows */
+        .color-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .color-row label {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 500;
+            color: #555;
+        }
+        .color-row input[type="color"] {
+            width: 40px;
+            height: 32px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            padding: 2px;
+        }
+
+        /* Category list */
+        .cat-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            transition: border-color 0.2s;
+        }
+        .cat-item:hover { border-color: var(--clr-accent); }
+        .cat-icon { font-size: 24px; }
+        .cat-info { flex: 1; }
+        .cat-name { font-weight: 600; font-size: 14px; }
+        .cat-table { font-size: 11px; color: var(--clr-text-label); }
+        .cat-actions { display: flex; gap: 6px; }
+        .cat-actions button {
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .cat-actions button:hover { opacity: 0.8; }
+        .cat-del { background: #fef2f2; color: #ef4444; }
+        .cat-edit { background: #eff6ff; color: #3b82f6; }
+
+        .empty-msg {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--clr-text-secondary);
+        }
+
+        @media (max-width: 768px) {
+            .main-content { padding: 16px 20px; }
+            .presets-grid { grid-template-columns: repeat(2, 1fr); }
+            .settings-tabs { overflow-x: auto; }
+            .tab-btn { padding: 10px 16px; font-size: 13px; white-space: nowrap; }
+        }
+    </style>
+</head>
+<body style="opacity:0;transition:opacity 0.15s">
+    <main class="main-content" id="mainContent">
+        <h1 class="page-title">Settings</h1>
+
+        <div class="settings-tabs">
+            <button class="tab-btn active" data-tab="profile">Profile</button>
+            <button class="tab-btn" data-tab="theme">Theme</button>
+            <button class="tab-btn" data-tab="categories">Categories</button>
+        </div>
+
+        <!-- PROFILE TAB -->
+        <div class="tab-panel active" id="tab-profile">
+            <div class="section-card">
+                <h3>Your Profile</h3>
+                <div class="form-row">
+                    <label>Display Name</label>
+                    <input type="text" id="profileName" placeholder="Your name">
+                </div>
+                <div class="form-row">
+                    <label>Email</label>
+                    <input type="email" id="profileEmail" disabled>
+                </div>
+                <button class="btn btn-primary" id="saveProfileBtn" onclick="saveProfile()">Save Changes</button>
+                <div class="msg" id="profileMsg"></div>
+            </div>
+
+            <div class="section-card">
+                <h3>Change Password</h3>
+                <div class="form-row">
+                    <label>New Password</label>
+                    <input type="password" id="newPassword" placeholder="Min 6 characters" minlength="6">
+                </div>
+                <div class="form-row">
+                    <label>Confirm New Password</label>
+                    <input type="password" id="confirmPassword" placeholder="Repeat password" minlength="6">
+                </div>
+                <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
+                <div class="msg" id="passwordMsg"></div>
+            </div>
+        </div>
+
+        <!-- THEME TAB -->
+        <div class="tab-panel" id="tab-theme">
+            <div class="section-card">
+                <h3>Theme Presets</h3>
+                <div class="presets-grid" id="presetsGrid"></div>
+            </div>
+
+            <div class="section-card">
+                <h3>Custom Colors</h3>
+                <div id="colorPickers"></div>
+                <div style="display:flex;gap:10px;margin-top:16px">
+                    <button class="btn btn-primary" onclick="saveTheme()">Save Theme</button>
+                    <button class="btn btn-outline" onclick="resetTheme()">Reset to Default</button>
+                </div>
+                <div class="msg" id="themeMsg"></div>
+            </div>
+        </div>
+
+        <!-- CATEGORIES TAB -->
+        <div class="tab-panel" id="tab-categories">
+            <div class="section-card">
+                <h3>Your Categories</h3>
+                <div id="categoriesList"><div class="empty-msg">Loading...</div></div>
+            </div>
+        </div>
+    </main>
+
+    <script src="sidebar.js"></script>
+    <script>
+        const SUPABASE_URL = 'https://masngvxdbxqrrreszjxv.supabase.co';
+
+        // ── Tab switching ──
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // ── Theme presets ──
+        const PRESETS = [
+            { name: 'Default Purple', start: '#667eea', end: '#764ba2', accent: '#667eea', bg: '#f5f5f5', card: '#ffffff', text: '#222222',
+              sidebarBg: '#1e293b', sidebarHeader: '#0f172a', sidebarText: '#94a3b8', sidebarTitle: '#f1f5f9' },
+            { name: 'Dark Mode',      start: '#1e293b', end: '#334155', accent: '#60a5fa', bg: '#0f172a', card: '#1e293b', text: '#f1f5f9',
+              sidebarBg: '#0f172a', sidebarHeader: '#020617', sidebarText: '#94a3b8', sidebarTitle: '#e2e8f0' },
+            { name: 'Ocean Blue',     start: '#0369a1', end: '#0284c7', accent: '#0ea5e9', bg: '#f0f9ff', card: '#ffffff', text: '#0c4a6e',
+              sidebarBg: '#0c4a6e', sidebarHeader: '#082f49', sidebarText: '#7dd3fc', sidebarTitle: '#f0f9ff' },
+            { name: 'Forest Green',   start: '#166534', end: '#15803d', accent: '#22c55e', bg: '#f0fdf4', card: '#ffffff', text: '#14532d',
+              sidebarBg: '#14532d', sidebarHeader: '#052e16', sidebarText: '#86efac', sidebarTitle: '#f0fdf4' },
+            { name: 'Sunset Orange',  start: '#c2410c', end: '#ea580c', accent: '#f97316', bg: '#fff7ed', card: '#ffffff', text: '#431407',
+              sidebarBg: '#7c2d12', sidebarHeader: '#431407', sidebarText: '#fdba74', sidebarTitle: '#fff7ed' },
+            { name: 'Rose Pink',      start: '#be123c', end: '#e11d48', accent: '#f43f5e', bg: '#fff1f2', card: '#ffffff', text: '#4c0519',
+              sidebarBg: '#881337', sidebarHeader: '#4c0519', sidebarText: '#fda4af', sidebarTitle: '#fff1f2' },
+        ];
+
+        const COLOR_FIELDS = [
+            { key: 'primary_color_start',  label: 'Header Gradient Start', css: '--clr-start',           def: '#667eea' },
+            { key: 'primary_color_end',    label: 'Header Gradient End',   css: '--clr-end',             def: '#764ba2' },
+            { key: 'header_text_color',    label: 'Header Text Color',     css: '--clr-header-text',     def: '#ffffff' },
+            { key: 'accent_color',         label: 'Accent / Buttons',      css: '--clr-accent',          def: '#667eea' },
+            { key: 'bg_color',             label: 'Page Background',       css: '--clr-bg',              def: '#f5f5f5' },
+            { key: 'card_color',           label: 'Card Background',       css: '--clr-card',            def: '#ffffff' },
+            { key: 'text_primary_color',   label: 'Primary Text',          css: '--clr-text-primary',    def: '#222222' },
+            { key: 'text_secondary_color', label: 'Secondary Text',        css: '--clr-text-secondary',  def: '#666666' },
+            { key: 'item_card_bg',         label: 'Item Card Background',  css: '--clr-item-card',       def: '#ffffff' },
+            { key: 'stats_bar_bg',         label: 'Stats Bar Background',  css: '--clr-stats-bar',       def: '#ffffff' },
+            { key: 'low_stock_color',      label: 'Low Stock Warning',     css: '--clr-low-stock',       def: '#ef4444' },
+            { key: 'btn_add_bg',           label: 'Add Button',            css: '--clr-btn-add',         def: '#22c55e' },
+            { key: 'btn_edit_bg',          label: 'Edit Button',           css: '--clr-btn-edit',        def: '#fbbf24' },
+            { key: 'btn_del_bg',           label: 'Delete Button',         css: '--clr-btn-del',         def: '#ef4444' },
+            { key: 'sidebar_bg',           label: 'Sidebar Background',    css: '--clr-sidebar-bg',      def: '#1e293b' },
+            { key: 'sidebar_header',       label: 'Sidebar Header/Footer', css: '--clr-sidebar-header',  def: '#0f172a' },
+            { key: 'sidebar_text',         label: 'Sidebar Nav Text',      css: '--clr-sidebar-text',    def: '#94a3b8' },
+            { key: 'sidebar_title',        label: 'Sidebar Title & Names', css: '--clr-sidebar-title',   def: '#f1f5f9' },
+        ];
+
+        let currentTheme = {};
+
+        // CSS var lookup map for all theme keys
+        const CSS_MAP = Object.fromEntries(COLOR_FIELDS.map(f => [f.key, f.css]));
+
+        function loadCurrentTheme() {
+            try { currentTheme = JSON.parse(localStorage.getItem('inv_theme') || '{}'); }
+            catch(e) { currentTheme = {}; }
+        }
+
+        // Pull theme from Supabase ui_settings and merge (AI-set values win over localStorage)
+        async function syncThemeFromSupabase() {
+            try {
+                const db = window.db;
+                const userId = window.currentUser?.id;
+                if (!db || !userId) return;
+                const { data } = await db.from('ui_settings').select('key,value').eq('user_id', userId);
+                if (!data || !data.length) return;
+
+                data.forEach(row => { currentTheme[row.key] = row.value; });
+
+                // Apply CSS vars
+                const root = document.documentElement;
+                data.forEach(row => {
+                    if (CSS_MAP[row.key]) root.style.setProperty(CSS_MAP[row.key], row.value);
+                });
+
+                // Persist merged result to localStorage
+                localStorage.setItem('inv_theme', JSON.stringify(currentTheme));
+                buildColorPickers();
+            } catch(e) { console.warn('Supabase theme sync failed:', e.message); }
+        }
+
+        function buildPresetsGrid() {
+            const grid = document.getElementById('presetsGrid');
+            grid.innerHTML = PRESETS.map((p, i) => `
+                <div class="preset-card" onclick="applyPreset(${i})">
+                    <div class="preset-swatch" style="background:linear-gradient(135deg, ${p.start}, ${p.end})"></div>
+                    <div class="preset-name">${p.name}</div>
+                </div>
+            `).join('');
+        }
+
+        function buildColorPickers() {
+            const container = document.getElementById('colorPickers');
+            container.innerHTML = COLOR_FIELDS.map(f => `
+                <div class="color-row">
+                    <label>${f.label}</label>
+                    <input type="color" id="clr_${f.key}" value="${currentTheme[f.key] || f.def}" onchange="previewColor('${f.key}', '${f.css}', this.value)">
+                </div>
+            `).join('');
+        }
+
+        function previewColor(key, cssVar, value) {
+            document.documentElement.style.setProperty(cssVar, value);
+            currentTheme[key] = value;
+        }
+
+        function applyPreset(index) {
+            const p = PRESETS[index];
+            Object.assign(currentTheme, {
+                primary_color_start: p.start, primary_color_end: p.end,
+                accent_color: p.accent, bg_color: p.bg,
+                card_color: p.card, text_primary_color: p.text,
+                sidebar_bg: p.sidebarBg, sidebar_header: p.sidebarHeader,
+                sidebar_text: p.sidebarText, sidebar_title: p.sidebarTitle
+            });
+            const root = document.documentElement;
+            root.style.setProperty('--clr-start', p.start);
+            root.style.setProperty('--clr-end', p.end);
+            root.style.setProperty('--clr-accent', p.accent);
+            root.style.setProperty('--clr-bg', p.bg);
+            root.style.setProperty('--clr-card', p.card);
+            root.style.setProperty('--clr-text-primary', p.text);
+            // Apply sidebar colors so the sidebar updates live
+            root.style.setProperty('--clr-sidebar-bg',     p.sidebarBg);
+            root.style.setProperty('--clr-sidebar-header', p.sidebarHeader);
+            root.style.setProperty('--clr-sidebar-text',   p.sidebarText);
+            root.style.setProperty('--clr-sidebar-title',  p.sidebarTitle);
+            buildColorPickers();
+            saveTheme();
+        }
+
+        async function saveTheme() {
+            // 1. Save to localStorage (instant apply on page load)
+            localStorage.setItem('inv_theme', JSON.stringify(currentTheme));
+
+            // 2. Sync to Supabase so AI reads/writes stay consistent
+            try {
+                const db = window.db;
+                const userId = window.currentUser?.id;
+                if (db && userId) {
+                    for (const [key, value] of Object.entries(currentTheme)) {
+                        await db.from('ui_settings')
+                            .upsert({ key, value, user_id: userId, updated_at: new Date().toISOString() },
+                                    { onConflict: 'key,user_id' });
+                    }
+                }
+            } catch(e) { console.warn('Could not sync theme to Supabase:', e.message); }
+
+            showMsg('themeMsg', 'Theme saved! Changes apply instantly across all pages.', 'success');
+        }
+
+        async function resetTheme() {
+            currentTheme = {};
+            localStorage.removeItem('inv_theme');
+
+            const root = document.documentElement;
+            COLOR_FIELDS.forEach(f => root.style.setProperty(f.css, f.def));
+
+            // Clear from Supabase
+            try {
+                const db = window.db;
+                const userId = window.currentUser?.id;
+                if (db && userId) {
+                    const keys = COLOR_FIELDS.map(f => f.key);
+                    for (const key of keys) {
+                        await db.from('ui_settings').delete().eq('key', key).eq('user_id', userId);
+                    }
+                }
+            } catch(e) { console.warn('Could not clear theme from Supabase:', e.message); }
+
+            buildColorPickers();
+            showMsg('themeMsg', 'Theme reset to defaults.', 'success');
+        }
+
+        // ── Profile ──
+        function loadProfile() {
+            const profile = window.currentProfile;
+            const user = window.currentUser;
+            if (profile) {
+                document.getElementById('profileName').value = profile.display_name || '';
+            }
+            if (user) {
+                document.getElementById('profileEmail').value = user.email || '';
+            }
+        }
+
+        async function saveProfile() {
+            const name = document.getElementById('profileName').value.trim();
+            if (!name) {
+                showMsg('profileMsg', 'Name cannot be empty.', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('saveProfileBtn');
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+
+            try {
+                const { error } = await window.db
+                    .from('profiles')
+                    .update({ display_name: name })
+                    .eq('id', window.currentUser.id);
+
+                if (error) throw error;
+
+                window.currentProfile.display_name = name;
+                showMsg('profileMsg', 'Profile updated!', 'success');
+            } catch(err) {
+                showMsg('profileMsg', err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Save Changes';
+            }
+        }
+
+        async function changePassword() {
+            const newPw = document.getElementById('newPassword').value;
+            const confirmPw = document.getElementById('confirmPassword').value;
+
+            if (!newPw || newPw.length < 6) {
+                showMsg('passwordMsg', 'Password must be at least 6 characters.', 'error');
+                return;
+            }
+            if (newPw !== confirmPw) {
+                showMsg('passwordMsg', 'Passwords do not match.', 'error');
+                return;
+            }
+
+            try {
+                const { error } = await window.db.auth.updateUser({ password: newPw });
+                if (error) throw error;
+                document.getElementById('newPassword').value = '';
+                document.getElementById('confirmPassword').value = '';
+                showMsg('passwordMsg', 'Password updated successfully!', 'success');
+            } catch(err) {
+                showMsg('passwordMsg', err.message, 'error');
+            }
+        }
+
+        // ── Categories ──
+        async function loadCategories() {
+            try {
+                const { data, error } = await window.db
+                    .from('table_definitions')
+                    .select('*')
+                    .eq('user_id', window.currentUser?.id)
+                    .order('display_name');
+
+                if (error) throw error;
+
+                const container = document.getElementById('categoriesList');
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<div class="empty-msg">No categories yet. Create one from the Dashboard.</div>';
+                    return;
+                }
+
+                container.innerHTML = data.map(cat => `
+                    <div class="cat-item" id="cat-${cat.table_name}">
+                        <span class="cat-icon">${cat.icon || '📦'}</span>
+                        <div class="cat-info">
+                            <div class="cat-name">${escapeHtml(cat.display_name)}</div>
+                            <div class="cat-table">${cat.table_name}</div>
+                        </div>
+                        <div class="cat-actions">
+                            <button class="cat-edit" onclick="window.location.href='inventory.html?table=${encodeURIComponent(cat.table_name)}'">Open</button>
+                            <button class="cat-del" onclick="deleteCategory('${cat.table_name}', '${escapeHtml(cat.display_name)}')">Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch(err) {
+                console.error('Error loading categories:', err);
+            }
+        }
+
+        async function deleteCategory(tableName, displayName) {
+            if (!confirm(`Are you sure you want to delete "${displayName}" and ALL its items? This cannot be undone.`)) return;
+
+            try {
+                const session = window.currentSession;
+                const response = await fetch(SUPABASE_URL + '/functions/v1/smart-api', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + session.access_token
+                    },
+                    body: JSON.stringify({
+                        tool_call: {
+                            name: 'delete_category',
+                            input: { table_name: tableName }
+                        }
+                    })
+                });
+
+                const result = await response.json();
+                if (!response.ok || result.error) throw new Error(result.error?.message || 'Delete failed');
+
+                const el = document.getElementById('cat-' + tableName);
+                if (el) el.remove();
+
+                if (typeof window.refreshSidebarCategories === 'function') {
+                    window.refreshSidebarCategories();
+                }
+            } catch(err) {
+                alert('Error deleting category: ' + err.message);
+            }
+        }
+
+        // ── Helpers ──
+        function showMsg(id, text, type) {
+            const el = document.getElementById(id);
+            el.textContent = text;
+            el.className = 'msg ' + type;
+            setTimeout(() => { el.className = 'msg'; }, 4000);
+        }
+
+        function escapeHtml(text) {
+            const d = document.createElement('div');
+            d.textContent = text;
+            return d.innerHTML;
+        }
+
+        // ── Init ──
+        window.addEventListener('sidebar-ready', async () => {
+            loadProfile();
+            loadCurrentTheme();
+            buildPresetsGrid();
+            buildColorPickers();
+            await syncThemeFromSupabase(); // merge AI-set values from Supabase
+            loadCategories();
+        });
+    </script>
+    <script src="ai-assistant-v4.js"></script>
+</body>
+</html>
