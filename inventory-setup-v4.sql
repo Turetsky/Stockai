@@ -140,16 +140,16 @@ CREATE POLICY "fd_select" ON field_definitions FOR SELECT
         )
     );
 
--- INSERT / UPDATE / DELETE managed via service-role (adminDb) in edge function only.
--- No direct user-level mutations through the API.
+-- INSERT/UPDATE/DELETE: Allow users to manage fields for tables they own.
+-- This is required for client-side data import.
 CREATE POLICY "fd_insert" ON field_definitions FOR INSERT
-    WITH CHECK (false); -- only service role bypasses this
+    WITH CHECK (auth.uid() IS NOT NULL AND user_id = auth.uid());
 
 CREATE POLICY "fd_update" ON field_definitions FOR UPDATE
-    USING (false);
+    USING (auth.uid() IS NOT NULL AND user_id = auth.uid());
 
 CREATE POLICY "fd_delete" ON field_definitions FOR DELETE
-    USING (false);
+    USING (auth.uid() IS NOT NULL AND user_id = auth.uid());
 
 
 -- ── 4. UI_SETTINGS ──────────────────────────────────────────
@@ -331,6 +331,61 @@ BEGIN
     RAISE NOTICE 'Seeded UI defaults for existing user %', owner_id;
 
 END $$;
+
+-- ── 9. DELETE USER ACCOUNT ────────────────────────────────────
+-- Function to delete a user's account and all associated data.
+-- This is called by the user from the app.
+CREATE OR REPLACE FUNCTION delete_user_account()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY INVOKER -- Changed from DEFINER for security best practices
+AS $$
+BEGIN
+  -- Delete the user from auth.users. This will trigger the on_auth_user_deleted trigger.
+  DELETE FROM auth.users WHERE id = auth.uid();
+END;
+$$;
+
+-- Allow authenticated users to call this function.
+GRANT EXECUTE ON FUNCTION delete_user_account() TO authenticated;
+
+
+-- Function to clean up all of a user's data.
+CREATE OR REPLACE FUNCTION cleanup_user_data()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  table_rec RECORD;
+BEGIN
+  -- Delete from profiles table
+  DELETE FROM public.profiles WHERE user_id = OLD.id;
+
+  -- Delete from ui_settings table
+  DELETE FROM public.ui_settings WHERE user_id = OLD.id;
+  
+  -- Delete from field_definitions table
+  DELETE FROM public.field_definitions WHERE user_id = OLD.id;
+
+  -- Delete dynamic item tables
+  FOR table_rec IN
+    SELECT table_name FROM public.table_definitions WHERE user_id = OLD.id
+  LOOP
+    EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(table_rec.table_name);
+  END LOOP;
+  
+  -- Finally, delete from table_definitions table
+  DELETE FROM public.table_definitions WHERE user_id = OLD.id;
+
+  RETURN OLD;
+END;
+$$;
+
+-- Trigger to clean up user data after a user is deleted from auth.users.
+CREATE TRIGGER on_auth_user_deleted
+  AFTER DELETE ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION cleanup_user_data();
 
 
 -- ── DONE ────────────────────────────────────────────────────

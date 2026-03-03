@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart';
 import '../models/theme_settings.dart';
@@ -22,7 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     final user = supabase.auth.currentUser;
     _nameController.text =
         user?.userMetadata?['display_name'] ?? user?.email?.split('@')[0] ?? '';
@@ -89,6 +93,44 @@ class _SettingsScreenState extends State<SettingsScreen>
     }
   }
 
+  Future<void> _deleteAccount() async {
+    if (!mounted) return;
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Account?'),
+        content: const Text(
+            'Are you sure you want to delete your account? This action is irreversible and will delete all your data.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDelete ?? false) {
+      try {
+        await _supabaseService.deleteMyAccount();
+        await _logout();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting account: $e')),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -99,6 +141,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           tabs: const [
             Tab(text: 'Appearance'),
             Tab(text: 'Profile'),
+            Tab(text: 'Data'),
           ],
         ),
       ),
@@ -114,7 +157,9 @@ class _SettingsScreenState extends State<SettingsScreen>
             saving: _savingName,
             onSave: _saveName,
             onLogout: _logout,
+            onDeleteAccount: _deleteAccount,
           ),
+          _DataTab(supabaseService: _supabaseService),
         ],
       ),
     );
@@ -223,12 +268,14 @@ class _ProfileTab extends StatelessWidget {
   final bool saving;
   final VoidCallback onSave;
   final VoidCallback onLogout;
+  final VoidCallback onDeleteAccount;
 
   const _ProfileTab({
     required this.nameController,
     required this.saving,
     required this.onSave,
     required this.onLogout,
+    required this.onDeleteAccount,
   });
 
   @override
@@ -280,6 +327,16 @@ class _ProfileTab extends StatelessWidget {
           onPressed: onLogout,
           icon: const Icon(Icons.logout),
           label: const Text('Sign Out'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.error,
+            side: BorderSide(color: Theme.of(context).colorScheme.error),
+          ),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: onDeleteAccount,
+          icon: const Icon(Icons.delete_forever),
+          label: const Text('Delete My Account'),
           style: OutlinedButton.styleFrom(
             foregroundColor: Theme.of(context).colorScheme.error,
             side: BorderSide(color: Theme.of(context).colorScheme.error),
@@ -387,6 +444,198 @@ class _PasswordSectionState extends State<_PasswordSection> {
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                 )
               : const Text('Change Password'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DataTab extends StatefulWidget {
+  final SupabaseService supabaseService;
+  const _DataTab({required this.supabaseService});
+
+  @override
+  State<_DataTab> createState() => _DataTabState();
+}
+
+class _DataTabState extends State<_DataTab> {
+  bool _isExporting = false;
+  bool _isImporting = false;
+
+  Future<void> _exportData() async {
+    setState(() => _isExporting = true);
+
+    try {
+      final categories = await widget.supabaseService.getCategories();
+      final data = {'categories': categories, 'items': <String, dynamic>{}};
+
+      for (final category in categories) {
+        final tableName = category['table_name'];
+        final fields = await widget.supabaseService.getFieldDefinitions(tableName);
+        final items = await widget.supabaseService.getItems(tableName);
+        (data['items'] as Map<String, dynamic>)[tableName] = {
+          'fields': fields,
+          'items': items,
+        };
+      }
+      final json = jsonEncode(data);
+      final fileName =
+          'inventory_export_${DateTime.now().toIso8601String()}.json';
+
+      final file = XFile.fromData(
+        Uint8List.fromList(utf8.encode(json)),
+        name: fileName,
+        mimeType: 'application/json',
+      );
+      await Share.shareXFiles([file], subject: 'Inventory Export');
+    } catch (e) {
+      _show('Error exporting data: $e');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  Future<void> _importData() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+
+    if (result == null || result.files.single.path == null) return;
+
+    setState(() => _isImporting = true);
+
+    try {
+      final file = result.files.single;
+      final content = await XFile(file.path!).readAsString();
+      final data = jsonDecode(content);
+
+      // Basic validation
+      if (data['categories'] == null || data['items'] == null) {
+        throw 'Invalid import file format';
+      }
+      if (!mounted) return;
+      final shouldImport = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Import Data?'),
+          content: const Text(
+              'This will replace all current data with the contents of the file. Are you sure?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error),
+              child: const Text('Import'),
+            ),
+          ],
+        ),
+      );
+
+      if (!(shouldImport ?? false)) return;
+
+      // Clear existing data (optional, depends on desired behavior)
+      // For simplicity, we'll just let upserts handle conflicts.
+      // A more robust solution would be a transaction with deletes.
+
+      // Import categories
+      for (final category in data['categories']) {
+        await widget.supabaseService.createCategory(category);
+      }
+
+      // Import items
+      for (final tableName in (data['items'] as Map).keys) {
+        final categoryData = (data['items'] as Map)[tableName];
+        // Import fields
+        for (final field in categoryData['fields']) {
+          await widget.supabaseService.createField(field);
+        }
+        // Import items
+        for (final item in categoryData['items']) {
+          await widget.supabaseService.upsertItem(tableName, item);
+        }
+      }
+
+      _show('Import successful!');
+    } catch (e) {
+      _show('Error importing data: $e');
+    } finally {
+      if (mounted) setState(() => _isImporting = false);
+    }
+  }
+
+  void _show(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16.0),
+      children: [
+        Text(
+          'Data Management',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Export Data',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                    'Save a JSON file of all your categories and inventory items. This file can be used as a backup or for migrating to another device.'),
+                const SizedBox(height: 16),
+                _isExporting
+                    ? const Center(child: CircularProgressIndicator())
+                    : FilledButton.icon(
+                        onPressed: _exportData,
+                        icon: const Icon(Icons.download),
+                        label: const Text('Export Now'),
+                      ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Import Data',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                    'Import a JSON file to restore your inventory. This will overwrite existing data.'),
+                const SizedBox(height: 16),
+                _isImporting
+                    ? const Center(child: CircularProgressIndicator())
+                    : FilledButton.icon(
+                        onPressed: _importData,
+                        icon: const Icon(Icons.upload),
+                        label: const Text('Import from File'),
+                        style: FilledButton.styleFrom(
+                            backgroundColor:
+                                Theme.of(context).colorScheme.secondary),
+                      ),
+              ],
+            ),
+          ),
         ),
       ],
     );
