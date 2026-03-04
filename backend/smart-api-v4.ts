@@ -531,8 +531,43 @@ async function runTool(
       }
 
       case 'run_sql': {
-        // adminDb: service role, bypasses RLS — advanced use only
-        const { data, error } = await adminDb.rpc('exec_sql', { sql: input.sql as string });
+        const rawSql = input.sql as string;
+
+        // Strip comments before checking (prevent bypass via -- or /* */)
+        const stripped = rawSql
+          .replace(/--[^\n]*/g, '')
+          .replace(/\/\*[\s\S]*?\*\//g, '');
+
+        // Block DDL/DCL and system schema access — use dedicated tools for schema changes
+        const forbidden: Array<[RegExp, string]> = [
+          [/\balter\b/i,               'ALTER'],
+          [/\bdrop\b/i,                'DROP'],
+          [/\bcreate\b/i,              'CREATE'],
+          [/\bgrant\b/i,               'GRANT'],
+          [/\brevoke\b/i,              'REVOKE'],
+          [/\btruncate\b/i,            'TRUNCATE'],
+          [/\bset\s+role\b/i,          'SET ROLE'],
+          [/\bauth\./i,                'auth schema'],
+          [/\bpg_/i,                   'pg_ system tables'],
+          [/\binformation_schema\b/i,  'information_schema'],
+        ];
+
+        for (const [pattern, label] of forbidden) {
+          if (pattern.test(stripped)) {
+            throw new Error(
+              `SQL blocked: "${label}" is not permitted in run_sql. Use the dedicated tools (create_category, add_field, delete_category) for schema changes.`
+            );
+          }
+        }
+
+        // Require user_id scoping — service role bypasses RLS so we enforce it here
+        if (!/\buser_id\b/i.test(stripped)) {
+          throw new Error(
+            `SQL blocked: query must include a user_id filter (e.g. WHERE user_id = '${userId}') to prevent cross-user data access.`
+          );
+        }
+
+        const { data, error } = await adminDb.rpc('exec_sql', { sql: rawSql });
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
         refresh = true;

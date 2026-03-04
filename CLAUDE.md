@@ -12,7 +12,7 @@ AI-powered inventory management system (v4.0) with custom user-defined categorie
 new/
 ├── web/              ← Static HTML/JS frontend
 ├── backend/          ← Supabase Edge Function + SQL schema
-├── flutter_app/      ← Mobile app (Flutter/Dart)
+├── app/              ← Mobile app (Flutter/Dart)
 ├── docs/             ← PROJECT_RECAP.txt, notes_sort.txt
 ├── scripts/          ← distribute.bat (Firebase App Distribution)
 ├── netlify.toml      ← Netlify config (publish = "web")
@@ -30,7 +30,7 @@ Access at `http://localhost:8000`.
 
 **Flutter mobile app**:
 ```bash
-cd flutter_app
+cd app
 flutter pub get
 flutter run
 flutter test

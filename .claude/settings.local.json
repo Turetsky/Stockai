@@ -16,7 +16,8 @@
       "Bash(flutter analyze:*)",
       "Bash(flutter:*)",
       "Bash(winget install:*)",
-      "Bash(gh auth:*)"
+      "Bash(gh auth:*)",
+      "Bash(gh repo:*)"
     ]
   }
 }

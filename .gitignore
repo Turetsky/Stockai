@@ -21,3 +21,6 @@ flutter_app/ios/Flutter/Flutter.podspec/
 Thumbs.db
 node_modules/
 *.log
+
+# Local Netlify folder
+.netlify
