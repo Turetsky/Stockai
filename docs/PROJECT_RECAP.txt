@@ -523,10 +523,28 @@ TECH STACK:
   APK: version 1.1.1+3, 51.9MB (bug fix release)
     Location: flutter_app/build/app/outputs/flutter-apk/app-release.apk
 
+  AI theme fix (chat_screen.dart):
+    - loadThemeFromSupabase() now awaited after AI response — theme updates instantly
+    - Previously fired-and-forgot, causing race condition with UI render
+
+  smart-api-v4.ts — AI theme awareness:
+    - Added theme_color (Flutter seed/primary color hex) and theme_mode (light/dark/system)
+      to set_ui_setting tool description and system prompt APPEARANCE section
+    - AI now knows to use these keys to change the Flutter app's full palette and mode
+
+  Netlify (Web):
+    Site:     cchi.netlify.app
+    Site ID:  a8646de0-6f9f-4b01-a211-0ea3ea9b394a
+    Team ID:  6903b820c3307337b61b87ee
+    Deploy:   netlify deploy --prod (from project root, publish dir = ".")
+    CLI:      netlify-cli installed globally via npm
+    Config:   netlify.toml in project root
+
   Firebase App Distribution:
     Project ID:    stockai-75833731-f9741
     Android App ID: 1:494810929579:android:798b5dc63ed5efba231aee
-    Release:       v1.1.1 (3) — distributed to yjturetsky@gmail.com
+    Latest release: v1.1.1 (3) — distributed to yjturetsky@gmail.com
+    GitHub: pushed to master (ab381c6)
     Deploy script: distribute.bat (run after: firebase login)
     CLI:           firebase-tools 15.8.0 (npm global)
     google-services.json copied to: flutter_app/android/app/

@@ -4,7 +4,7 @@ echo  StockAI - Firebase App Distribution
 echo ============================================
 echo.
 
-set APK="%~dp0flutter_app\build\app\outputs\flutter-apk\app-release.apk"
+set APK="%~dp0..\flutter_app\build\app\outputs\flutter-apk\app-release.apk"
 set APP_ID=1:494810929579:android:798b5dc63ed5efba231aee
 set PROJECT=stockai-75833731-f9741
 

@@ -1331,8 +1331,8 @@ class _DataTabState extends State<_DataTab> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.share),
-                          tooltip: 'Export as CSV',
+                          icon: const Icon(Icons.file_download_outlined),
+                          tooltip: 'Export',
                           onPressed: () => _exportCategory(category),
                         ),
                         IconButton(

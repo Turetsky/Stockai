@@ -1,0 +1,27 @@
+ISSUES & TASKS — SORTED
+================================================================
+
+[ APP ]
+1.  fix ai talk back              — OPEN (needs verification)
+
+[ BOTH — Web & App ]
+3.  Custom Theme Option           — IN PROGRESS
+      App: ✓ done (color wheel, per-element, presets)
+      Web: can't save custom preset — still needed
+8.  Work on AI presets smarter    — OPEN
+15. About page                    — OPEN
+
+[ BACKEND ]
+6.  check on SQL switch / multi-user support  — OPEN
+14. Multi-user support test                   — OPEN
+
+[ BACKEND + WEB ]
+7.  check on keys                 — OPEN
+
+[ FEATURE IDEA ]
+2.  Chat History (track convos in notes)  — OPEN
+
+[ UNCERTAIN — revisit later ]
+19. Possible issue on continued chat (web/app — not confirmed)
+
+================================================================
