@@ -58,6 +58,33 @@ class ApiService {
     return data['message'] ?? data['content']?[0]?['text'] ?? 'No response';
   }
 
+  Future<void> deleteAccount() async {
+    final authResponse = await _supabase.auth.refreshSession();
+    final session = authResponse.session;
+    if (session == null) throw Exception('Not authenticated');
+
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) throw Exception('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse(_edgeFunctionUrl),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${session.accessToken}',
+      },
+      body: jsonEncode({
+        'tool_call': {
+          'name': 'run_sql',
+          'input': {'sql': "DELETE FROM auth.users WHERE id = '$userId'"},
+        },
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete account');
+    }
+  }
+
   Future<void> deleteCategory(String tableName) async {
     final authResponse = await _supabase.auth.refreshSession();
     final session = authResponse.session;

@@ -116,7 +116,7 @@ class _ChatScreenState extends State<ChatScreen> {
         await _tts.speak(response);
       }
       // Reload theme + app name in case the AI changed them via set_ui_setting
-      loadThemeFromSupabase();
+      await loadThemeFromSupabase();
       setState(() {
         _uiSettingsFuture = _supabaseService.getUiSettings();
       });
@@ -242,24 +242,61 @@ class _ChatScreenState extends State<ChatScreen> {
 
           return Column(
             children: [
-              DrawerHeader(
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  MediaQuery.of(context).padding.top + 24,
+                  20,
+                  20,
+                ),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Theme.of(context).colorScheme.primary,
+                      Color.lerp(
+                        Theme.of(context).colorScheme.primary,
+                        Theme.of(context).colorScheme.tertiary,
+                        0.35,
+                      )!,
+                    ],
+                  ),
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    if (appLogo.isNotEmpty)
-                      Text(appLogo, style: const TextStyle(fontSize: 36)),
-                    if (appLogo.isNotEmpty) const SizedBox(width: 12),
+                    if (appLogo.isNotEmpty) ...[
+                      Text(appLogo, style: const TextStyle(fontSize: 28)),
+                      const SizedBox(width: 10),
+                    ],
                     Expanded(
-                      child: Text(
-                        appName,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onPrimaryContainer,
-                              fontWeight: FontWeight.bold,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            appName.isNotEmpty ? appName : 'Inventory Manager',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 17,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            supabase.auth.currentUser?.email ?? '',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.75),
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
                   ],

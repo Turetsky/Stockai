@@ -176,10 +176,12 @@ HEADER & BRANDING:
 - header_text_color                        → header text color (hex)
 - app_name                                 → app title in header
 
-COLORS:
+COLORS (web & mobile app):
+- theme_color         → Flutter app primary/seed color (hex, e.g. "#667eea") — changes the whole app palette
+- theme_mode          → Flutter app color mode: "light", "dark", or "system"
 - accent_color        → buttons, highlights (hex)
-- bg_color            → page background (hex)
-- card_color          → dashboard card background (hex)
+- bg_color            → page/app background (hex)
+- card_color          → dashboard card / app card background (hex)
 
 TYPOGRAPHY:
 - font_size_base        → e.g. "14px", "16px"
@@ -711,8 +713,10 @@ ADVANCED:
   run_sql          → arbitrary SQL (use sparingly)
 
 APPEARANCE (set_ui_setting):
-  primary_color_start/end, header_text_color, accent_color,
-  bg_color, card_color, font_size_base,
+  theme_color (Flutter seed/primary color, hex e.g. "#ff6600"),
+  theme_mode (Flutter: "light"/"dark"/"system"),
+  bg_color, card_color, accent_color (web + Flutter custom overrides),
+  primary_color_start/end, header_text_color, font_size_base,
   text_primary_color, text_secondary_color,
   item_card_bg, stats_bar_bg, low_stock_color,
   btn_add_bg, btn_edit_bg, btn_del_bg,

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "494810929579",
+    "project_id": "stockai-75833731-f9741",
+    "storage_bucket": "stockai-75833731-f9741.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:494810929579:android:798b5dc63ed5efba231aee",
+        "android_client_info": {
+          "package_name": "stockai.inventory.com"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAAx66fFZElSrymbhZXJxeJPD7-IBZN8aQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

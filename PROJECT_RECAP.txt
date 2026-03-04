@@ -411,6 +411,127 @@ TECH STACK:
       Both import and export share one FutureBuilder wrapping both buttons.
 
 ================================================================================
+ RECENT CHANGES (2026-03-03)
+================================================================================
+
+  settings_screen.dart — Added Data tab (3rd tab) + Delete Account + refactor:
+
+    - TabController length: 2 → 3
+    - Tab 3 "Data": lists all user categories, each with Import CSV (file_picker)
+      and Export CSV (share_plus) buttons. Import matches headers by display_name
+      or field_name (case-insensitive), upserts rows, shows imported count snackbar.
+      Export builds CSV with proper quoting, shares via native share sheet.
+    - _ProfileTab: added "Danger Zone" section below Sign Out with Delete Account
+      button (OutlinedButton, error color). Tap shows confirm AlertDialog; on
+      confirm calls ApiService.deleteAccount(), signs out, navigates to LoginScreen.
+    - _ProfileTab: now receives onDeleteAccount VoidCallback.
+    - _SettingsScreenState: added ApiService instance + _deleteAccount() method.
+
+  lib/services/api_service.dart:
+    - New deleteAccount() method: refreshes session, calls edge function in
+      direct tool_call mode with run_sql → DELETE FROM auth.users WHERE id = userId.
+      Cascades to profiles and all user data via ON DELETE CASCADE.
+
+================================================================================
+ RECENT CHANGES (2026-03-03, session 2)
+================================================================================
+
+  lib/screens/chat_screen.dart — Drawer header redesign (item #17):
+    - Replaced DrawerHeader widget (plain primaryContainer banner) with a compact
+      custom gradient Container (primary → tertiary blend, 35% lerp).
+    - Shows app logo emoji + name on left, user email below in white/75% opacity.
+    - Uses MediaQuery top padding so it sits correctly under the status bar.
+    - No more big blank "Stockai" banner — clean, compact, themed.
+
+  lib/main.dart — Background tint increase (item #3):
+    - Light mode surface tints bumped slightly (surface: 5%→8%, others +2-3%)
+      so the chosen theme color is more visibly present in the background
+      while Material 3 onSurface/onPrimary colors guarantee text contrast.
+
+  lib/screens/settings_screen.dart — Theme tab + Data tab (items #3, #16):
+    - "Appearance" tab renamed → "Theme".
+    - _AppearanceTab renamed → _ThemeTab.
+    - Added "Custom Color" section at bottom of Theme tab:
+        _HexColorInput widget: color swatch preview + hex text field + Apply button.
+        Shows current seed color as hint. Parses 6-char hex (with or without #).
+        Apply button enabled only when a valid hex is typed; saves via setUiSetting.
+    - Data tab: added category management alongside import/export.
+        "New" TextButton.icon in header opens _DataCategorySheet bottom sheet
+        (name field + emoji picker, same layout as chat screen's _NewCategorySheet).
+        Creates via ApiService.sendMessage() natural language call, reloads on success.
+        Each category row now has 3 icon buttons: Import CSV, Export CSV, Delete.
+        Delete shows confirm dialog then calls ApiService.deleteCategory(), reloads.
+
+  Item #4 confirmed (no code change needed):
+    - Web AI controls theme via set_ui_setting tool in smart-api-v4.ts ✓
+    - App AI: loadThemeFromSupabase() called after every AI response in
+      _sendMessage() (chat_screen.dart line ~119) ✓ — theme changes from AI apply live.
+
+================================================================================
+ RECENT CHANGES (2026-03-03, session 3)
+================================================================================
+
+  pubspec.yaml — new packages:
+    flutter_colorpicker: ^1.1.0, excel: ^4.0.2, path_provider: ^2.1.0
+    Note: excel 4.0.6 was resolved; TextCellValue.value is TextSpan (not String).
+
+  lib/models/theme_settings.dart:
+    - Added CustomPreset class (name, seedColor, customColors Map<String,Color>)
+      with toJson()/fromJson() for Supabase persistence.
+    - ThemeSettings gained customColors: Map<String, Color> field (keys: background,
+      cards, accent). These override specific scheme roles in _buildTheme().
+
+  lib/main.dart:
+    - Added customPresetsNotifier: ValueNotifier<List<CustomPreset>>([])
+    - loadThemeFromSupabase() now also reads bg_color, card_color, accent_color,
+      custom_presets (JSON array) from ui_settings.
+    - _buildTheme() now accepts Map<String,Color> customColors. Applies:
+        background → surface + surfaceContainerLow variants
+        cards → surfaceContainer + surfaceContainerHigh variants
+        accent → secondary + secondaryContainer + tertiary
+    - InventoryManagerApp passes settings.customColors to _buildTheme().
+
+  lib/screens/settings_screen.dart — complete Theme + Data tab rewrite:
+
+    Theme tab (now StatefulWidget):
+    - Color wheel picker (HueRingPicker from flutter_colorpicker) opened in a
+      dialog via StatefulBuilder for real-time preview. Replaces hex text input.
+    - Per-element color rows: Primary, Background, Cards, Accent.
+      Each shows current color swatch + hex or "Auto from theme" label.
+      Optional reset button appears when a custom override is set.
+    - Built-in presets grid unchanged (6 presets).
+    - Custom presets grid: appears when presets are saved; each has an X delete
+      button. Tapping a custom preset loads it (seedColor + all customColors).
+    - "Save as Preset" section: name text field + Save button saves current
+      seedColor + customColors as a CustomPreset, persists to ui_settings as JSON.
+    - All theme writes call setUiSetting() directly from within the tab.
+
+    Data tab (split into two sections):
+    - Section 1 (top): Categories Management
+        Create/delete categories + per-row export (CSV via Share.share).
+        Import button removed from per-row; export only per row now.
+    - Section 2 (bottom, after Divider): Import & Export
+        "Export All" button: collects all categories → builds xlsx (one sheet per
+        category) using excel package → writes to temp dir → shares via
+        Share.shareXFiles. Sheet names match category display names.
+        "Import" button: FilePicker (csv/xlsx). For xlsx: matches sheet names to
+        categories, imports rows. For csv: shows category selection dialog first.
+        Accepts Google Sheets exports (.xlsx format).
+    - Note: excel package 4.x exports Border which conflicts with Flutter's Border.
+      Fixed with: import 'package:excel/excel.dart' hide Border;
+
+  APK: version 1.1.1+3, 51.9MB (bug fix release)
+    Location: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+
+  Firebase App Distribution:
+    Project ID:    stockai-75833731-f9741
+    Android App ID: 1:494810929579:android:798b5dc63ed5efba231aee
+    Release:       v1.1.1 (3) — distributed to yjturetsky@gmail.com
+    Deploy script: distribute.bat (run after: firebase login)
+    CLI:           firebase-tools 15.8.0 (npm global)
+    google-services.json copied to: flutter_app/android/app/
+
+================================================================================
  FUTURE IDEAS
 ================================================================================
 

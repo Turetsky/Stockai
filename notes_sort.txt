@@ -2,37 +2,42 @@ ISSUES & TASKS — SORTED
 ================================================================
 
 [ APP ]
-1.  fix ai talk back
-9.  in app manage categories button
-10. AI memory
-11. categories tab opening issue
-13. export import feature
-16. Add categories to settings
-17. Banner issue
-18. Double icon issue
-3a. Add white mode to app (new — added during sort)
+1.  fix ai talk back              — OPEN (needs verification)
+9.  in app manage categories      ✓ DONE (ManageCategoriesSheet in drawer)
+10. AI memory                     ✓ DONE (conversation history passed per turn)
+11. categories tab opening issue  ✓ DONE (sort_order fix)
+13. export import feature         ✓ DONE (Data tab in settings + category_screen)
+16. Add categories to settings    ✓ DONE (Data tab — extra: add manage to Data tab)
+17. Banner issue                  ✓ DONE (drawer header replaced with gradient
+      container — compact, themed, shows app name + email, no big banner)
+18. Double icon issue             ✓ DONE (fixed for new categories)
+3a. Add white mode to app         ✓ DONE (Light mode in Appearance/Theme tab)
 
 [ WEB ]
-5.  Remove font size setting ✓ DONE
+5.  Remove font size setting      ✓ DONE
 
 [ BOTH — Web & App ]
-3.  Custom Theme Option (colors, presets, customization)
-4.  Add AI to the list of theme options
-8.  work on ai presets to make smarter use
-12. delete account in settings
-15. About page
+3.  Custom Theme Option           — IN PROGRESS
+      App: ✓ color wheel picker, per-element colors (Primary/Background/Cards/Accent),
+           save as named preset, load/delete custom presets
+      Web: presets exist but can't save custom preset — still needed
+4.  Add AI to theme options       ✓ DONE (web: set_ui_setting tool; app:
+      loadThemeFromSupabase() called after every AI response — both confirmed)
+8.  Work on AI presets smarter    — OPEN
+12. Delete account in settings    ✓ DONE (Profile tab, app + Danger Zone section)
+15. About page                    — OPEN
 
 [ BACKEND ]
-6.  check on SQL switch in order to enforce multi user support
-14. Multi user support test
+6.  check on SQL switch / multi-user support  — OPEN
+14. Multi-user support test                   — OPEN
 
 [ BACKEND + WEB ]
-7.  check on keys
+7.  check on keys                 — OPEN
 
 [ FEATURE IDEA ]
-2.  Possible Chat History — track conversations/previous interactions in notes
+2.  Chat History (track convos in notes)  — OPEN
 
 [ UNCERTAIN — revisit later ]
-19. Possible issue on a continued chat (web/app — not confirmed real yet)
+19. Possible issue on continued chat (web/app — not confirmed)
 
 ================================================================

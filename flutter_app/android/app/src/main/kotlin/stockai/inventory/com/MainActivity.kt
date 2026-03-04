@@ -1,4 +1,4 @@
-package com.example.inventory_manager
+package stockai.inventory.com
 
 import io.flutter.embedding.android.FlutterActivity
 
