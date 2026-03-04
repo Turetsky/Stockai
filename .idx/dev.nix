@@ -6,14 +6,14 @@
 
   # Use https://search.nixos.org/packages to find packages
   packages = [
-    pkgs.flutter,
-    pkgs.python311,
-    pkgs.nss_latest,
-    pkgs.fontconfig,
-    pkgs.freetype,
-    pkgs.libGL,
-    pkgs.android-sdk,
-    (pkgs.android-sdk.packages.build-tools.override { version = "35.0.0"; }),
+    pkgs.flutter
+    pkgs.python311
+    pkgs.nss_latest
+    pkgs.fontconfig
+    pkgs.freetype
+    pkgs.libGL
+    pkgs.android-sdk
+    (pkgs.android-sdk.packages.build-tools.override { version = "35.0.0"; })
     pkgs.jdk
   ];
 
