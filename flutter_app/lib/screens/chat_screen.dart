@@ -205,8 +205,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             builder: (_) => _NewCategorySheet(
               onCreated: (name, icon) async {
-                final emoji = icon.isNotEmpty ? '$icon ' : '';
-                final msg = 'Create a new category called "$emoji$name"';
+                final msg = 'Create a new category called "$name" with the icon "$icon"';
                 _messageController.text = msg;
                 await _sendMessage();
                 setState(() => _loadCategories());
@@ -471,7 +470,7 @@ class _ChatScreenState extends State<ChatScreen> {
               color: theme.colorScheme.surface,
               boxShadow: [
                 BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
+                    color: Colors.black.withOpacity(0.05),
                     blurRadius: 8,
                     offset: const Offset(0, -2))
               ],
@@ -513,7 +512,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             horizontal: 20, vertical: 12),
                         filled: true,
                         fillColor: theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.3),
+                            .withOpacity(0.3),
                       ),
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) => _sendMessage(),

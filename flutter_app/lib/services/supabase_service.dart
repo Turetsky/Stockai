@@ -11,6 +11,14 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  Future<void> createCategory(Map<String, dynamic> data) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) throw Exception('Not authenticated');
+    data['user_id'] = userId;
+    data.remove('id');
+    await _client.from('table_definitions').upsert(data, onConflict: 'table_name, user_id');
+  }
+
   Future<List<Map<String, dynamic>>> getFieldDefinitions(String tableName) async {
     final response = await _client
         .from('field_definitions')
@@ -18,6 +26,14 @@ class SupabaseService {
         .eq('table_name', tableName)
         .order('sort_order');
     return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<void> createField(Map<String, dynamic> data) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) throw Exception('Not authenticated');
+    data['user_id'] = userId;
+    data.remove('id');
+    await _client.from('field_definitions').upsert(data, onConflict: 'table_name, field_name, user_id');
   }
 
   Future<List<Map<String, dynamic>>> getItems(String tableName) async {
@@ -59,6 +75,10 @@ class SupabaseService {
       {'user_id': userId, 'key': key, 'value': value},
       onConflict: 'user_id, key',
     );
+  }
+
+  Future<void> deleteMyAccount() async {
+    await _client.rpc('delete_user_account');
   }
 
   String _parseValue(dynamic value) {
