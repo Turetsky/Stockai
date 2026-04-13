@@ -19,6 +19,8 @@ new/
 └── CLAUDE.md
 ```
 
+Note: `flutter_app/` at the repo root is a stale copy — `app/` is the active Flutter project.
+
 ## Running the Project
 
 **Web frontend** — no build step required:
@@ -50,6 +52,8 @@ flutter analyze   # lint Dart code
 | `web/sidebar.js` | **Shared across all pages** — Supabase client init, auth guard, `onAuthStateChange`, theme loader, category nav |
 | `web/ai-assistant-v4.js` | Floating chat widget — calls `refreshSession()` for a fresh JWT before every API call |
 
+`sidebar.js` runs as an IIFE and exposes `window.db` (Supabase client), `window.currentSession`, `window.currentUser`, `window.currentProfile`, and `window.refreshSidebarCategories()`. It dispatches a `sidebar-ready` CustomEvent when complete — pages that need auth data should wait for this event.
+
 ### Backend (`backend/`)
 
 | File | Role |
@@ -71,14 +75,31 @@ Every table has `user_id uuid NOT NULL`. RLS policies scope all data to `auth.ui
 
 `backend/smart-api-v4.ts` runs a tool-use loop (up to 8 iterations) with Claude `claude-haiku-4-5-20251001`. The 13 tools cover: `list_categories`, `get_items`, `get_fields`, `create_category`, `rename_category`, `delete_category`, `add_field`, `upsert_item`, `delete_item`, `run_sql`, `get_ui_settings`, `set_ui_setting`, `set_layout`.
 
-Ownership is double-checked in every tool call. `run_sql` is restricted to admin (service role key).
+The Edge Function also supports a **direct tool call mode** — send `{ tool_call: { name, input } }` in the request body to invoke a single tool without going through the Claude loop. Used by the Flutter app for `delete_category` and `deleteAccount`.
+
+Ownership is double-checked in every tool call. `run_sql` is restricted to admin (service role key) and requires a `user_id` filter in the SQL.
+
+### Flutter App (`app/`)
+
+| File | Role |
+|------|------|
+| `app/lib/main.dart` | App entry — Supabase init, global `themeNotifier` (`ValueNotifier<ThemeSettings>`), `loadThemeFromSupabase()` |
+| `app/lib/screens/chat_screen.dart` | Primary screen — AI chat, drawer with category list, voice input (STT), TTS, stop button |
+| `app/lib/screens/category_screen.dart` | Item CRUD + CSV export for a single category |
+| `app/lib/screens/settings_screen.dart` | Appearance (theme presets + color pickers) + Profile (password change, delete account) |
+| `app/lib/screens/login_screen.dart` | Email/password auth + signup |
+| `app/lib/services/api_service.dart` | HTTP calls to the Edge Function — always calls `refreshSession()` first |
+| `app/lib/services/supabase_service.dart` | Direct Supabase SDK queries (categories, items, ui_settings) |
+| `app/lib/models/theme_settings.dart` | `ThemeSettings` model + 6 built-in presets |
+
+Theme changes from the AI flow through `themeNotifier` (set in `loadThemeFromSupabase()`) which rebuilds the `MaterialApp` via `ValueListenableBuilder`.
 
 ### Theme System
 
-- CSS custom properties on `document.documentElement`
-- Applied by an inline `<script>` in `<head>` reading `localStorage` key `inv_theme` — prevents FOUC
-- `web/sidebar.js` re-applies as fallback
-- Settings page has 6 presets + custom color pickers
+- **Web**: CSS custom properties on `document.documentElement`, sourced from `localStorage` key `inv_theme` (set inline in `<head>` to prevent FOUC). `sidebar.js` re-applies as fallback.
+- **Flutter**: `theme_color` (hex seed) + `theme_mode` ("light"/"dark"/"system") drive `ColorScheme.fromSeed`; optional `bg_color`, `card_color`, `accent_color` override specific surface roles.
+- `ui_settings` rows store values as jsonb. When read back as a string, values may be wrapped in extra JSON quotes — `SupabaseService._parseValue()` strips them.
+- Settings page has 6 presets + custom color pickers.
 
 ## Critical Patterns
 
@@ -94,4 +115,8 @@ Ownership is double-checked in every tool call. `run_sql` is restricted to admin
 
 ## Supabase Config Location
 
-Supabase URL and anon key are hardcoded in `web/sidebar.js` and `web/ai-assistant-v4.js` — update both when changing projects.
+Supabase URL and anon key are hardcoded in `web/sidebar.js`, `web/ai-assistant-v4.js`, and `app/lib/main.dart` (also `app/lib/services/api_service.dart` for the Edge Function URL) — update all when changing projects.
+
+## Chrome DevTools MCP (WSL2)
+
+Working — config and fix details are in memory (`project_chrome_devtools.md`).

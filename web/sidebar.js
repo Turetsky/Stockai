@@ -445,6 +445,105 @@
     .sidebar-nav::-webkit-scrollbar-thumb:hover {
       background: rgba(255, 255, 255, 0.15);
     }
+
+    /* ── Feedback modal ─────────────────────────────────── */
+    .feedback-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 9999;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-start;
+      padding: 0 0 80px 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .feedback-modal-backdrop.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+    .feedback-modal {
+      background: #1e293b;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      width: 320px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: translateY(12px);
+      transition: transform 0.2s ease;
+    }
+    .feedback-modal-backdrop.open .feedback-modal {
+      transform: translateY(0);
+    }
+    .feedback-modal-header {
+      background: #0f172a;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .feedback-modal-title {
+      color: #f1f5f9;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .feedback-modal-close {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 0;
+    }
+    .feedback-modal-close:hover { color: #f1f5f9; }
+    .feedback-modal-body {
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .feedback-modal-textarea {
+      background: #0f172a;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: #f1f5f9;
+      font-size: 13px;
+      padding: 10px 12px;
+      resize: none;
+      min-height: 100px;
+      font-family: inherit;
+      outline: none;
+    }
+    .feedback-modal-textarea:focus {
+      border-color: rgba(255,255,255,0.25);
+    }
+    .feedback-modal-submit {
+      background: #3b82f6;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 9px 16px;
+      transition: background 0.15s ease;
+    }
+    .feedback-modal-submit:hover:not(:disabled) { background: #2563eb; }
+    .feedback-modal-submit:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .feedback-modal-status {
+      font-size: 12px;
+      color: #94a3b8;
+      min-height: 16px;
+      text-align: center;
+    }
   `;
   document.head.appendChild(styleElement);
 
@@ -583,6 +682,24 @@
     `;
     nav.appendChild(settingsLink);
 
+    // Contact / feedback link
+    const contactDivider = document.createElement('div');
+    contactDivider.className = 'nav-divider';
+    nav.appendChild(contactDivider);
+
+    const contactLink = document.createElement('button');
+    contactLink.className = 'nav-item';
+    contactLink.style.cssText = 'width:100%;background:none;border:none;cursor:pointer;text-align:left;';
+    contactLink.addEventListener('click', () => openFeedbackModal());
+    const contactIcon = document.createElement('span');
+    contactIcon.className = 'nav-icon';
+    contactIcon.textContent = '\u2709\uFE0F';
+    const contactText = document.createElement('span');
+    contactText.textContent = 'Send Feedback';
+    contactLink.appendChild(contactIcon);
+    contactLink.appendChild(contactText);
+    nav.appendChild(contactLink);
+
     sidebar.appendChild(nav);
 
     // Footer with user info
@@ -644,6 +761,55 @@
   document.body.prepend(overlay);
   document.body.prepend(sidebar);
   document.body.prepend(topbar);
+
+  // Inject feedback modal
+  const feedbackBackdrop = document.createElement('div');
+  feedbackBackdrop.className = 'feedback-modal-backdrop';
+  feedbackBackdrop.id = 'feedbackModalBackdrop';
+  feedbackBackdrop.addEventListener('click', (e) => {
+    if (e.target === feedbackBackdrop) closeFeedbackModal();
+  });
+
+  const feedbackModal = document.createElement('div');
+  feedbackModal.className = 'feedback-modal';
+
+  const feedbackHeader = document.createElement('div');
+  feedbackHeader.className = 'feedback-modal-header';
+  const feedbackTitle = document.createElement('span');
+  feedbackTitle.className = 'feedback-modal-title';
+  feedbackTitle.textContent = 'Send Feedback';
+  const feedbackClose = document.createElement('button');
+  feedbackClose.className = 'feedback-modal-close';
+  feedbackClose.textContent = '✕';
+  feedbackClose.addEventListener('click', closeFeedbackModal);
+  feedbackHeader.appendChild(feedbackTitle);
+  feedbackHeader.appendChild(feedbackClose);
+
+  const feedbackBody = document.createElement('div');
+  feedbackBody.className = 'feedback-modal-body';
+
+  const feedbackTextarea = document.createElement('textarea');
+  feedbackTextarea.className = 'feedback-modal-textarea';
+  feedbackTextarea.placeholder = 'Share a bug, idea, or anything on your mind…';
+  feedbackTextarea.id = 'feedbackTextarea';
+
+  const feedbackStatus = document.createElement('div');
+  feedbackStatus.className = 'feedback-modal-status';
+  feedbackStatus.id = 'feedbackStatus';
+
+  const feedbackSubmit = document.createElement('button');
+  feedbackSubmit.className = 'feedback-modal-submit';
+  feedbackSubmit.textContent = 'Send';
+  feedbackSubmit.addEventListener('click', submitFeedback);
+
+  feedbackBody.appendChild(feedbackTextarea);
+  feedbackBody.appendChild(feedbackStatus);
+  feedbackBody.appendChild(feedbackSubmit);
+
+  feedbackModal.appendChild(feedbackHeader);
+  feedbackModal.appendChild(feedbackBody);
+  feedbackBackdrop.appendChild(feedbackModal);
+  document.body.appendChild(feedbackBackdrop);
 
   // Wrap main content if not already wrapped
   let mainContent = document.getElementById('mainContent');
@@ -757,6 +923,24 @@
         `;
         nav.appendChild(settingsLink);
 
+        // Feedback button
+        const fbDivider = document.createElement('div');
+        fbDivider.className = 'nav-divider';
+        nav.appendChild(fbDivider);
+
+        const fbBtn = document.createElement('button');
+        fbBtn.className = 'nav-item';
+        fbBtn.style.cssText = 'width:100%;background:none;border:none;cursor:pointer;text-align:left;';
+        fbBtn.addEventListener('click', () => openFeedbackModal());
+        const fbIcon = document.createElement('span');
+        fbIcon.className = 'nav-icon';
+        fbIcon.textContent = '\u2709\uFE0F';
+        const fbText = document.createElement('span');
+        fbText.textContent = 'Send Feedback';
+        fbBtn.appendChild(fbIcon);
+        fbBtn.appendChild(fbText);
+        nav.appendChild(fbBtn);
+
         const header = sidebar.querySelector('.sidebar-header');
         header.parentNode.insertBefore(nav, header.nextSibling);
       }
@@ -766,7 +950,79 @@
   };
 
   // ============================================================================
-  // 10. SHOW PAGE (auth complete)
+  // 10. FEEDBACK MODAL FUNCTIONS
+  // ============================================================================
+
+  function openFeedbackModal() {
+    const backdrop = document.getElementById('feedbackModalBackdrop');
+    const textarea = document.getElementById('feedbackTextarea');
+    const status = document.getElementById('feedbackStatus');
+    if (!backdrop) return;
+    if (status) status.textContent = '';
+    if (textarea) { textarea.value = ''; textarea.focus(); }
+    backdrop.classList.add('open');
+  }
+
+  function closeFeedbackModal() {
+    const backdrop = document.getElementById('feedbackModalBackdrop');
+    if (backdrop) backdrop.classList.remove('open');
+  }
+
+  async function submitFeedback() {
+    const textarea = document.getElementById('feedbackTextarea');
+    const status = document.getElementById('feedbackStatus');
+    const submitBtn = document.querySelector('.feedback-modal-submit');
+    const message = textarea?.value?.trim();
+    if (!message) {
+      if (status) status.textContent = 'Please enter a message.';
+      return;
+    }
+
+    if (submitBtn) submitBtn.disabled = true;
+    if (status) status.textContent = 'Sending…';
+
+    try {
+      const session = window.currentSession;
+      if (!session) throw new Error('Not authenticated');
+
+      const response = await fetch(
+        'https://masngvxdbxqrrreszjxv.supabase.co/functions/v1/smart-api',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            tool_call: {
+              name: 'send_feedback',
+              input: {
+                message,
+                user_email: window.currentUser?.email || '',
+              },
+            },
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok || data.result?.startsWith('❌')) {
+        throw new Error(data.result || data.error || 'Send failed');
+      }
+
+      if (status) status.textContent = '✓ Sent! Thank you.';
+      if (textarea) textarea.value = '';
+      setTimeout(closeFeedbackModal, 1500);
+    } catch (err) {
+      if (status) status.textContent = 'Failed to send. Please try again.';
+      console.error('Feedback error:', err);
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  }
+
+  // ============================================================================
+  // 11. SHOW PAGE (auth complete)
   // ============================================================================
   document.body.classList.add('loaded');
   document.body.style.opacity = '1'; // override inline style="opacity:0" (inline > class specificity)

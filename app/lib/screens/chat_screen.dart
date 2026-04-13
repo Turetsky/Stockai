@@ -53,10 +53,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _initSpeech() async {
     _speechAvailable = await _speech.initialize(
-      onError: (_) => setState(() => _isListening = false),
+      onError: (_) { if (mounted) setState(() => _isListening = false); },
       onStatus: (status) {
         if (status == 'done' || status == 'notListening') {
-          setState(() => _isListening = false);
+          if (mounted) setState(() => _isListening = false);
         }
       },
     );
@@ -67,14 +67,14 @@ class _ChatScreenState extends State<ChatScreen> {
     await _tts.setLanguage('en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
-    _tts.setStartHandler(() => setState(() => _isSpeaking = true));
-    _tts.setCompletionHandler(() => setState(() => _isSpeaking = false));
-    _tts.setCancelHandler(() => setState(() => _isSpeaking = false));
+    _tts.setStartHandler(() { if (mounted) setState(() => _isSpeaking = true); });
+    _tts.setCompletionHandler(() { if (mounted) setState(() => _isSpeaking = false); });
+    _tts.setCancelHandler(() { if (mounted) setState(() => _isSpeaking = false); });
   }
 
   Future<void> _stopSpeaking() async {
     await _tts.stop();
-    setState(() => _isSpeaking = false);
+    if (mounted) setState(() => _isSpeaking = false);
   }
 
   void _loadCategories() {
@@ -109,24 +109,30 @@ class _ChatScreenState extends State<ChatScreen> {
         concise: concise,
         history: historyMessages,
       );
-      setState(() {
-        _messages.add(ChatMessage(text: response, isUser: false));
-      });
+      if (mounted) {
+        setState(() {
+          _messages.add(ChatMessage(text: response, isUser: false));
+        });
+      }
       if (speak) {
         await _tts.speak(response);
       }
       // Reload theme + app name in case the AI changed them via set_ui_setting
       await loadThemeFromSupabase();
-      setState(() {
-        _uiSettingsFuture = _supabaseService.getUiSettings();
-      });
+      if (mounted) {
+        setState(() {
+          _uiSettingsFuture = _supabaseService.getUiSettings();
+        });
+      }
     } catch (e) {
-      setState(() {
-        _messages.add(
-            ChatMessage(text: 'Error: ${e.toString()}', isUser: false, isError: true));
-      });
+      if (mounted) {
+        setState(() {
+          _messages.add(
+              ChatMessage(text: 'Error: ${e.toString()}', isUser: false, isError: true));
+        });
+      }
     } finally {
-      setState(() => _sending = false);
+      if (mounted) setState(() => _sending = false);
       _scrollToBottom();
     }
   }
@@ -397,7 +403,15 @@ class _ChatScreenState extends State<ChatScreen> {
         centerTitle: true,
         elevation: 1,
         actions: [
-          PopupMenuButton(
+          Theme(
+            data: theme.copyWith(
+              popupMenuTheme: PopupMenuThemeData(
+                color: theme.colorScheme.surfaceContainerHigh,
+                surfaceTintColor: Colors.transparent,
+                textStyle: TextStyle(color: theme.colorScheme.onSurface),
+              ),
+            ),
+            child: PopupMenuButton(
             icon: CircleAvatar(
               radius: 16,
               backgroundColor: theme.colorScheme.primaryContainer,
@@ -408,16 +422,20 @@ class _ChatScreenState extends State<ChatScreen> {
                     fontWeight: FontWeight.bold),
               ),
             ),
-            itemBuilder: (_) => <PopupMenuEntry>[
+            itemBuilder: (context) => <PopupMenuEntry>[
               PopupMenuItem(
-                enabled: false,
+                onTap: () {},
                 child: Text(displayName.toString(),
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface)),
               ),
               PopupMenuItem(
-                enabled: false,
+                onTap: () {},
                 child: Text(user?.email ?? '',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ),
               const PopupMenuDivider(),
               PopupMenuItem(
@@ -431,6 +449,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             ],
+          ),
           ),
           const SizedBox(width: 8),
         ],
@@ -611,11 +630,21 @@ class _ManageCategoriesSheetState extends State<_ManageCategoriesSheet> {
   List<Map<String, dynamic>>? _categories;
   String? _error;
   String? _deletingTable;
+  String? _renamingTable; // table currently showing inline rename field
+  final Map<String, TextEditingController> _renameControllers = {};
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _renameControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -624,6 +653,24 @@ class _ManageCategoriesSheetState extends State<_ManageCategoriesSheet> {
       if (mounted) setState(() => _categories = cats);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  Future<void> _saveRename(String tableName, String currentName) async {
+    final controller = _renameControllers[tableName];
+    if (controller == null) return;
+    final newName = controller.text.trim();
+    setState(() => _renamingTable = null);
+    if (newName.isEmpty || newName == currentName) return;
+    try {
+      await _supabaseService.renameCategory(tableName, newName);
+      widget.onCategoriesChanged();
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 
@@ -709,22 +756,81 @@ class _ManageCategoriesSheetState extends State<_ManageCategoriesSheet> {
                   final isEmoji =
                       iconRunes.isNotEmpty && iconRunes.first > 0x2000;
                   final isDeleting = _deletingTable == tableName;
+                  final isRenaming = _renamingTable == tableName;
+                  if (isRenaming &&
+                      !_renameControllers.containsKey(tableName)) {
+                    _renameControllers[tableName] =
+                        TextEditingController(text: name);
+                  }
                   return ListTile(
                     leading: isEmoji
                         ? Text(icon, style: const TextStyle(fontSize: 22))
                         : const Icon(Icons.inventory_2_outlined),
-                    title: Text(name),
+                    title: isRenaming
+                        ? TextField(
+                            controller: _renameControllers[tableName],
+                            autofocus: true,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: UnderlineInputBorder(),
+                            ),
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) =>
+                                _saveRename(tableName, name),
+                          )
+                        : GestureDetector(
+                            onTap: () {
+                              _renameControllers[tableName] =
+                                  TextEditingController(text: name);
+                              setState(() => _renamingTable = tableName);
+                            },
+                            child: Text(name),
+                          ),
                     trailing: isDeleting
                         ? const SizedBox(
                             width: 24,
                             height: 24,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : IconButton(
-                            icon: Icon(Icons.delete_outline,
-                                color: theme.colorScheme.error),
-                            onPressed: () => _deleteCategory(tableName, name),
-                          ),
+                        : isRenaming
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.check, size: 18),
+                                    onPressed: () =>
+                                        _saveRename(tableName, name),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, size: 18),
+                                    onPressed: () => setState(
+                                        () => _renamingTable = null),
+                                  ),
+                                ],
+                              )
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon:
+                                        const Icon(Icons.edit_outlined, size: 18),
+                                    tooltip: 'Rename',
+                                    onPressed: () {
+                                      _renameControllers[tableName] =
+                                          TextEditingController(text: name);
+                                      setState(
+                                          () => _renamingTable = tableName);
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: Icon(Icons.delete_outline,
+                                        color: theme.colorScheme.error),
+                                    tooltip: 'Delete',
+                                    onPressed: () =>
+                                        _deleteCategory(tableName, name),
+                                  ),
+                                ],
+                              ),
                   );
                 },
               ),

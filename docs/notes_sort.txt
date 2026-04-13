@@ -16,7 +16,7 @@ ISSUES & TASKS — SORTED
 14. Multi-user support test                   — OPEN
 
 [ BACKEND + WEB ]
-7.  check on keys                 — OPEN
+7.  check on keys                 — DONE ✓ (Anthropic key is server-side only, not exposed)
 
 [ FEATURE IDEA ]
 2.  Chat History (track convos in notes)  — OPEN

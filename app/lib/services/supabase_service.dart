@@ -77,6 +77,28 @@ class SupabaseService {
     );
   }
 
+  Future<void> renameCategory(String tableName, String newDisplayName) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) throw Exception('Not authenticated');
+    await _client
+        .from('table_definitions')
+        .update({'display_name': newDisplayName})
+        .eq('table_name', tableName)
+        .eq('user_id', userId);
+  }
+
+  Future<void> renameFieldDisplay(
+      String tableName, String fieldName, String newDisplayName) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) throw Exception('Not authenticated');
+    await _client
+        .from('field_definitions')
+        .update({'display_name': newDisplayName})
+        .eq('table_name', tableName)
+        .eq('field_name', fieldName)
+        .eq('user_id', userId);
+  }
+
   Future<void> deleteMyAccount() async {
     await _client.rpc('delete_user_account');
   }

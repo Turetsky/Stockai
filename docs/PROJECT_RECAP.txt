@@ -545,7 +545,9 @@ TECH STACK:
     Android App ID: 1:494810929579:android:798b5dc63ed5efba231aee
     Latest release: v1.1.1 (3) — distributed to yjturetsky@gmail.com
     GitHub: pushed to master (ab381c6)
+    Tester email:  yjturetsky@gmail.com (always include when distributing)
     Deploy script: distribute.bat (run after: firebase login)
+    Linux deploy:  firebase appdistribution:distribute app/build/app/outputs/flutter-apk/app-release.apk --app 1:494810929579:android:798b5dc63ed5efba231aee --project stockai-75833731-f9741 --testers "yjturetsky@gmail.com" --release-notes "..."
     CLI:           firebase-tools 15.8.0 (npm global)
     google-services.json copied to: flutter_app/android/app/
 

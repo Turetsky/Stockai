@@ -129,6 +129,32 @@ const tools = [
     },
   },
   {
+    name: 'remove_field',
+    description: 'Remove a field/column from an existing inventory table. Always confirm with the user first as this deletes all data in that column.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        table_name: { type: 'string' },
+        field_name: { type: 'string', description: 'The field_name (snake_case) to remove' },
+      },
+      required: ['table_name', 'field_name'],
+    },
+  },
+  {
+    name: 'rename_field',
+    description: 'Rename the display name of an existing field, and optionally change its type.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        table_name:       { type: 'string' },
+        field_name:       { type: 'string', description: 'The current field_name (snake_case)' },
+        new_display_name: { type: 'string', description: 'New human-readable label' },
+        new_field_type:   { type: 'string', enum: ['text', 'number', 'date', 'textarea'], description: 'Optional — change the column type. Existing data will be cast; cast failures will error.' },
+      },
+      required: ['table_name', 'field_name', 'new_display_name'],
+    },
+  },
+  {
     name: 'upsert_item',
     description: 'Add a new item or update an existing one.',
     input_schema: {
@@ -485,6 +511,66 @@ async function runTool(
         return { result: `✅ Field "${input.display_name}" added to ${tn}.`, refresh };
       }
 
+      case 'remove_field': {
+        const tn = sanitizeTableName(input.table_name as string);
+        const fn = sanitizeTableName(input.field_name as string);
+
+        // Prevent removing system/protected fields
+        const protected_fields = ['id', 'user_id', 'created_at', 'updated_at'];
+        if (protected_fields.includes(fn)) {
+          throw new Error(`Cannot remove system field "${fn}".`);
+        }
+
+        await assertOwnership(tn, userDb);
+
+        // Drop column from physical table
+        const { data: alterRes } = await adminDb.rpc('exec_sql', {
+          sql: `ALTER TABLE ${tn} DROP COLUMN IF EXISTS ${fn};`,
+        });
+        if (alterRes?.error) throw new Error(`DDL error: ${alterRes.error}`);
+
+        // Remove from field_definitions
+        await adminDb.from('field_definitions')
+          .delete()
+          .eq('table_name', tn)
+          .eq('field_name', fn)
+          .eq('user_id', userId);
+
+        refresh = true;
+        return { result: `✅ Field "${fn}" removed from ${tn}.`, refresh };
+      }
+
+      case 'rename_field': {
+        const tn = sanitizeTableName(input.table_name as string);
+        const fn = sanitizeTableName(input.field_name as string);
+        const newType = input.new_field_type as string | undefined;
+
+        await assertOwnership(tn, userDb);
+
+        // If field type is changing, ALTER the physical column first
+        if (newType) {
+          const pgT = pgType(newType);
+          const { data: alterRes } = await adminDb.rpc('exec_sql', {
+            sql: `ALTER TABLE ${tn} ALTER COLUMN ${fn} TYPE ${pgT} USING ${fn}::${pgT};`,
+          });
+          if (alterRes?.error) throw new Error(`Type change failed: ${alterRes.error}`);
+        }
+
+        const metaUpdate: Record<string, string> = { display_name: input.new_display_name as string };
+        if (newType) metaUpdate['field_type'] = newType;
+
+        const { error } = await adminDb.from('field_definitions')
+          .update(metaUpdate)
+          .eq('table_name', tn)
+          .eq('field_name', fn)
+          .eq('user_id', userId);
+        if (error) throw error;
+
+        refresh = true;
+        const typeNote = newType ? ` (type → ${newType})` : '';
+        return { result: `✅ Field "${fn}" renamed to "${input.new_display_name}"${typeNote}.`, refresh };
+      }
+
       /* ── ITEMS ────────────────────────────────────────────── */
 
       case 'upsert_item': {
@@ -622,6 +708,41 @@ async function runTool(
         };
       }
 
+      case 'send_feedback': {
+        const message = input.message as string;
+        const userEmail = (input.user_email as string) ?? '';
+        if (!message?.trim()) throw new Error('Message is required.');
+
+        // Always persist to DB
+        const { error: fbErr } = await adminDb
+          .from('feedback')
+          .insert({ user_id: userId, user_email: userEmail, message: message.trim() });
+        if (fbErr) console.error('Feedback DB error:', fbErr.message);
+
+        // Send email via Resend if key is configured
+        const resendKey = Deno.env.get('RESEND_API_KEY');
+        if (resendKey) {
+          const emailRes = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${resendKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: 'Inventory Feedback <onboarding@resend.dev>',
+              to: ['yjturetsky@gmail.com'],
+              subject: `Feedback from ${userEmail || userId}`,
+              text: message.trim(),
+            }),
+          });
+          if (!emailRes.ok) {
+            console.error('Resend error:', await emailRes.text());
+          }
+        }
+
+        return { result: '✅ Feedback submitted. Thank you!', refresh: false };
+      }
+
       default:
         return { result: `Unknown tool: ${name}`, refresh: false };
     }
@@ -741,6 +862,8 @@ MANAGE INVENTORY:
   rename_category  → rename or change icon
   delete_category  → permanently remove (confirm first!)
   add_field        → add a column
+  remove_field     → remove a column (confirm first — deletes all data in that column!)
+  rename_field     → rename a field's display label
   upsert_item      → add or update an item
   delete_item      → remove an item
 
@@ -765,7 +888,7 @@ LAYOUT (set_layout):
 RULES:
 - Always include a "quantity" number field when creating a category.
 - table_name must be lowercase snake_case.
-- Always confirm with the user before deleting anything.
+- Always confirm with the user before deleting anything or removing a field.
 - Be concise. Summarize what changed after each action.
 - To navigate: say "navigate to inventory.html?table=TABLE_NAME"`;
 

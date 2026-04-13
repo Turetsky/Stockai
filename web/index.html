@@ -718,20 +718,11 @@
                     if (!error && data) {
                         table._count = data.length;
 
-                        // Find quantity column and sum it
-                        const fields = table.fields || [];
-                        const qtyField = fields.find(f =>
-                            f.name.toLowerCase().includes('quantity') ||
-                            f.name.toLowerCase().includes('qty') ||
-                            f.name.toLowerCase() === 'quantity'
-                        );
-
-                        if (qtyField && data.length > 0) {
-                            table._qty = data.reduce((sum, item) => {
-                                const val = item[qtyField.name];
-                                return sum + (typeof val === 'number' ? val : 0);
-                            }, 0);
-                        }
+                        // Sum quantity directly from item data
+                        table._qty = data.reduce((sum, item) => {
+                            const val = item.quantity ?? item.qty ?? 0;
+                            return sum + (typeof val === 'number' ? val : 0);
+                        }, 0);
                     }
                 } catch (err) {
                     console.error(`Error loading counts for ${table.table_name}:`, err);
@@ -801,7 +792,7 @@
                         </div>
                         <div class="stat-item">
                             <div class="stat-label">Quantity</div>
-                            <div class="stat-value">${table._qty}</div>
+                            <div class="stat-value">${table._qty > 0 ? table._qty : '—'}</div>
                         </div>
                     </div>
                 </div>
