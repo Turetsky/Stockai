@@ -1010,6 +1010,19 @@
         throw new Error(data.result || data.error || 'Send failed');
       }
 
+      // Send email via Web3Forms (client-side, no server needed)
+      fetch('https://api.web3forms.com/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          access_key: 'dd653064-1a32-4524-b218-08a1b972c011',
+          subject: 'Inventory App Feedback from ' + (window.currentUser?.email || 'unknown'),
+          from_name: window.currentUser?.email || 'Inventory App User',
+          email: window.currentUser?.email || 'noreply@example.com',
+          message,
+        }),
+      }).catch(() => {}); // fire-and-forget
+
       if (status) status.textContent = '✓ Sent! Thank you.';
       if (textarea) textarea.value = '';
       setTimeout(closeFeedbackModal, 1500);
