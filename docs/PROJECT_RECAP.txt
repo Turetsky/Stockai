@@ -1,5 +1,5 @@
 ================================================================================
- STOCKAI — PROJECT RECAP (v4.2)
+ STOCKAI — PROJECT RECAP (v4.3)
 ================================================================================
 
 OVERVIEW:
@@ -298,6 +298,67 @@ TECH STACK:
     - Web: Netlify https://cchi.netlify.app (8 files uploaded)
     - Supabase Edge Function: smart-api v40 (ACTIVE)
     - GitHub: pushed to master
+
+================================================================================
+ RECENT CHANGES (2026-04-14, session 2) — v4.3
+================================================================================
+
+  FLUTTER — Drawer double-icon fix (chat_screen.dart):
+    - Categories stored in DB have display_name = "📚 Books" AND icon = "📚".
+      The ListTile was showing the emoji in leading AND at the start of title text.
+    - Fix: strip leading emoji + whitespace from display_name using regex
+      RegExp(r'^\p{Emoji_Presentation}\s*', unicode: true) before rendering title.
+    - Applied in both the main drawer ListView and the Manage Categories sheet.
+
+  FLUTTER — Email confirmation flow (login_screen.dart):
+    - signUp() previously always navigated to ChatScreen after signup, even when
+      email confirmation is required (session would be null, causing crashes).
+    - Fix: capture AuthResponse from signUp(); if response.session != null →
+      navigate to ChatScreen (auto-confirm path); if null → show confirmation screen.
+    - Added _confirmationSent bool + _pendingEmail string state fields.
+    - Confirmation screen: envelope icon, "Check your email" heading, email address,
+      "Back to Sign In" button. Works with Supabase "Confirm email" setting ON.
+
+  AI — Field ordering enforcement (smart-api-v4.ts):
+    - Root cause of wrong data layout: AI was creating categories with price/type
+      fields at position 0 instead of item name (e.g. "Cost per Unit" as field[0]).
+      Card display convention requires field[0] = identity, field[1] = quantity.
+    - create_category tool description now explicitly mandates:
+        fields[0]: item name/identity (text, required: true) — shown as card title
+        fields[1]: quantity (number) — shown as stock count badge
+        fields[2+]: any additional custom fields
+      NEVER put price, cost, type, unit at position 0.
+    - sort_order auto-assignment bug fixed: was i+1 (1-based), now i (0-based) to
+      match system prompt convention that says "sort_order 0 = identity".
+    - RULES section split into CATEGORY CREATION RULES + DATA INSERTION RULES with
+      explicit "call get_fields before upsert_item", "one upsert per item" rules.
+    - Deployed: supabase functions deploy smart-api --no-verify-jwt
+
+  SECURITY — Bot account cleanup:
+    - Detected bot signup: benraker80@gmail.com (created 2026-03-02, never confirmed
+      email, never signed in, zero real data beyond auto-created profile row).
+    - Deleted via: DELETE FROM auth.users WHERE email = 'benraker80@gmail.com'
+    - Profile row cascade-deleted automatically (FK ON DELETE CASCADE).
+    - Root cause: email confirmation was already enabled in Supabase but the bot
+      signed up during a window when it may have been off. Confirmed it is ON now.
+
+  SECURITY — Supabase keys removed from source code (web):
+    - Anon key and URL were hardcoded in 6 web files. Moved to window.SUPABASE_URL
+      and window.SUPABASE_ANON_KEY with hardcoded fallbacks for local dev.
+    - New web/config.js (gitignored): sets window.SUPABASE_URL and ANON_KEY.
+    - netlify.toml build command: generates config.js from Netlify env vars at
+      deploy time (printf into web/config.js).
+    - Added <script src="/config.js"> before other scripts in all 4 HTML pages.
+    - Netlify env vars set: SUPABASE_URL, SUPABASE_ANON_KEY.
+    - web/config.js added to .gitignore. Keys remain as fallbacks in JS for local
+      development without the Netlify build step.
+    - Files updated: sidebar.js, landing.html, ai-assistant-v4.js, index.html,
+      inventory.html, settings.html.
+
+  DEPLOYMENTS:
+    - Supabase Edge Function: smart-api (AI field ordering rules)
+    - Web: Netlify https://cchi.netlify.app — config.js build injection active
+    - Git: committed as v4.3 (push pending GitHub re-auth)
 
 ================================================================================
  RECENT CHANGES (2026-04-13, session 2)
