@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../main.dart';
 import '../services/api_service.dart';
 import '../services/supabase_service.dart';
@@ -29,8 +29,11 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isListening = false;
 
   // TTS
-  final FlutterTts _tts = FlutterTts();
+  final AudioPlayer _player = AudioPlayer();
   bool _isSpeaking = false;
+  String _ttsVoiceId = '21m00Tcm4TlvDq8ikWAM'; // ElevenLabs Rachel (default)
+  double _ttsStability = 0.5;
+  double _ttsSimilarityBoost = 0.75;
 
   // Drawer state
   late Future<List<Map<String, dynamic>>> _categoriesFuture;
@@ -45,7 +48,7 @@ class _ChatScreenState extends State<ChatScreen> {
       isUser: false,
     ));
     _initSpeech();
-    _initTts();
+    _initPlayer();
     _loadCategories();
     _uiSettingsFuture = _supabaseService.getUiSettings();
     loadThemeFromSupabase();
@@ -63,17 +66,26 @@ class _ChatScreenState extends State<ChatScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _initTts() async {
-    await _tts.setLanguage('en-US');
-    await _tts.setSpeechRate(0.5);
-    await _tts.setVolume(1.0);
-    _tts.setStartHandler(() { if (mounted) setState(() => _isSpeaking = true); });
-    _tts.setCompletionHandler(() { if (mounted) setState(() => _isSpeaking = false); });
-    _tts.setCancelHandler(() { if (mounted) setState(() => _isSpeaking = false); });
+  void _initPlayer() {
+    _player.onPlayerStateChanged.listen((state) {
+      if (mounted) setState(() => _isSpeaking = state == PlayerState.playing);
+    });
+    // Load voice + TTS params
+    _supabaseService.getUiSettings().then((settings) {
+      if (!mounted) return;
+      setState(() {
+        final v = settings['tts_voice_id'];
+        if (v != null && v.isNotEmpty) _ttsVoiceId = v;
+        final stab = double.tryParse(settings['tts_stability'] ?? '');
+        if (stab != null) _ttsStability = stab.clamp(0.0, 1.0);
+        final sim = double.tryParse(settings['tts_similarity_boost'] ?? '');
+        if (sim != null) _ttsSimilarityBoost = sim.clamp(0.0, 1.0);
+      });
+    });
   }
 
   Future<void> _stopSpeaking() async {
-    await _tts.stop();
+    await _player.stop();
     if (mounted) setState(() => _isSpeaking = false);
   }
 
@@ -85,7 +97,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _messageController.text.trim();
     if (text.isEmpty || _sending) return;
 
-    await _tts.stop();
+    await _player.stop();
     setState(() {
       _messages.add(ChatMessage(text: text, isUser: true));
       _sending = true;
@@ -115,7 +127,15 @@ class _ChatScreenState extends State<ChatScreen> {
         });
       }
       if (speak) {
-        await _tts.speak(response);
+        try {
+          final audio = await _apiService.synthesizeSpeech(
+            response,
+            voiceId: _ttsVoiceId,
+            stability: _ttsStability,
+            similarityBoost: _ttsSimilarityBoost,
+          );
+          await _player.play(BytesSource(audio));
+        } catch (_) {}
       }
       // Reload theme + app name in case the AI changed them via set_ui_setting
       await loadThemeFromSupabase();
@@ -126,10 +146,17 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _messages.add(
-              ChatMessage(text: 'Error: ${e.toString()}', isUser: false, isError: true));
-        });
+        if (e is SessionExpiredException) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+            (_) => false,
+          );
+        } else {
+          setState(() {
+            _messages.add(
+                ChatMessage(text: 'Error: ${e.toString()}', isUser: false, isError: true));
+          });
+        }
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -146,7 +173,7 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    await _tts.stop();
+    await _player.stop();
     setState(() => _isListening = true);
 
     await _speech.listen(
@@ -229,7 +256,7 @@ class _ChatScreenState extends State<ChatScreen> {
         future: _uiSettingsFuture,
         builder: (context, uiSnapshot) {
           final uiSettings = uiSnapshot.data ?? {};
-          final rawAppName = uiSettings['app_name'] ?? 'Inventory Manager';
+          final rawAppName = uiSettings['app_name'] ?? 'StockAI';
           // Extract leading emoji (per sidebar.js pattern)
           String appLogo = '';
           String appName = rawAppName;
@@ -282,7 +309,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            appName.isNotEmpty ? appName : 'Inventory Manager',
+                            appName.isNotEmpty ? appName : 'StockAI',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w700,
@@ -385,7 +412,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.dispose();
     _scrollController.dispose();
     _speech.stop();
-    _tts.stop();
+    _player.dispose();
     super.dispose();
   }
 
@@ -399,7 +426,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       drawer: _buildDrawer(),
       appBar: AppBar(
-        title: const Text('Inventory Manager'),
+        title: const Text('StockAI'),
         centerTitle: true,
         elevation: 1,
         actions: [

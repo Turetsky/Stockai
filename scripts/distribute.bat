@@ -22,7 +22,8 @@ echo.
 firebase appdistribution:distribute %APK% ^
   --app %APP_ID% ^
   --project %PROJECT% ^
-  --release-notes "v1.1.0 - Color wheel theme picker, per-element color customization, save custom presets, Data tab redesign (categories + import/export with Excel/CSV support)"
+  --testers "Yjturetsky@gmail.com" ^
+  --release-notes "v1.2.0 - StockAI rebrand, animated splash screen, ElevenLabs TTS (12 free voices + sliders), voice settings, recycling bin, web export/import, about page, mobile AI chat full-screen overlay"
 
 echo.
 if %ERRORLEVEL%==0 (

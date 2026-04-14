@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings - Inventory Manager</title>
+    <title>Settings - StockAI</title>
     <script>
     (function(){try{var t=JSON.parse(localStorage.getItem('inv_theme')||'{}'),r=document.documentElement,m={primary_color_start:'--clr-start',primary_color_end:'--clr-end',header_text_color:'--clr-header-text',accent_color:'--clr-accent',bg_color:'--clr-bg',card_color:'--clr-card',card_radius:'--card-radius',text_primary_color:'--clr-text-primary',text_secondary_color:'--clr-text-secondary',item_card_bg:'--clr-item-card',stats_bar_bg:'--clr-stats-bar',low_stock_color:'--clr-low-stock',btn_add_bg:'--clr-btn-add',btn_edit_bg:'--clr-btn-edit',btn_del_bg:'--clr-btn-del',sidebar_bg:'--clr-sidebar-bg',sidebar_header:'--clr-sidebar-header',sidebar_text:'--clr-sidebar-text',sidebar_title:'--clr-sidebar-title'};for(var k in m)if(t[k])r.style.setProperty(m[k],t[k])}catch(e){}})();
     </script>
@@ -224,7 +224,7 @@
         .cat-info { flex: 1; }
         .cat-name { font-weight: 600; font-size: 14px; }
         .cat-table { font-size: 11px; color: var(--clr-text-label); }
-        .cat-actions { display: flex; gap: 6px; }
+        .cat-actions { display: flex; gap: 6px; flex-wrap: wrap; }
         .cat-actions button {
             padding: 6px 12px;
             font-size: 12px;
@@ -237,11 +237,44 @@
         .cat-actions button:hover { opacity: 0.8; }
         .cat-del { background: #fef2f2; color: #ef4444; }
         .cat-edit { background: #eff6ff; color: #3b82f6; }
+        .cat-export { background: #f0fdf4; color: #16a34a; }
 
         .empty-msg {
             text-align: center;
             padding: 40px 20px;
             color: var(--clr-text-secondary);
+        }
+
+        /* Import section */
+        .import-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .import-row select {
+            flex: 1;
+            min-width: 140px;
+            padding: 9px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 13px;
+            font-family: inherit;
+            color: var(--clr-text-primary);
+            background: var(--clr-card);
+            cursor: pointer;
+        }
+        .import-row select:focus { outline: none; border-color: var(--clr-accent); }
+        .import-row input[type="file"] {
+            flex: 1;
+            min-width: 0;
+            font-size: 13px;
+            color: var(--clr-text-secondary);
+        }
+        .import-hint {
+            font-size: 12px;
+            color: var(--clr-text-secondary);
+            margin-top: 8px;
         }
 
         @media (max-width: 768px) {
@@ -257,13 +290,13 @@
         <h1 class="page-title">Settings</h1>
 
         <div class="settings-tabs">
-            <button class="tab-btn active" data-tab="profile">Profile</button>
-            <button class="tab-btn" data-tab="theme">Theme</button>
-            <button class="tab-btn" data-tab="categories">Categories</button>
+            <button class="tab-btn active" data-tab="theme">Theme</button>
+            <button class="tab-btn" data-tab="profile">Profile</button>
+            <button class="tab-btn" data-tab="data">Data</button>
         </div>
 
         <!-- PROFILE TAB -->
-        <div class="tab-panel active" id="tab-profile">
+        <div class="tab-panel" id="tab-profile">
             <div class="section-card">
                 <h3>Your Profile</h3>
                 <div class="form-row">
@@ -294,7 +327,7 @@
         </div>
 
         <!-- THEME TAB -->
-        <div class="tab-panel" id="tab-theme">
+        <div class="tab-panel active" id="tab-theme">
             <div class="section-card">
                 <h3>Theme Presets</h3>
                 <div class="presets-grid" id="presetsGrid"></div>
@@ -304,18 +337,31 @@
                 <h3>Custom Colors</h3>
                 <div id="colorPickers"></div>
                 <div style="display:flex;gap:10px;margin-top:16px">
-                    <button class="btn btn-primary" onclick="saveTheme()">Save Theme</button>
                     <button class="btn btn-outline" onclick="resetTheme()">Reset to Default</button>
                 </div>
                 <div class="msg" id="themeMsg"></div>
             </div>
         </div>
 
-        <!-- CATEGORIES TAB -->
-        <div class="tab-panel" id="tab-categories">
+        <!-- DATA TAB -->
+        <div class="tab-panel" id="tab-data">
             <div class="section-card">
                 <h3>Your Categories</h3>
                 <div id="categoriesList"><div class="empty-msg">Loading...</div></div>
+            </div>
+
+            <div class="section-card">
+                <h3>Import Data</h3>
+                <p style="font-size:13px;color:var(--clr-text-secondary);margin-bottom:14px">Upload a CSV file to add items to an existing category. Column headers must match the category's field names.</p>
+                <div class="import-row">
+                    <select id="importTableSelect">
+                        <option value="">Select category…</option>
+                    </select>
+                    <input type="file" id="importFileInput" accept=".csv">
+                    <button class="btn btn-primary" onclick="importCategoryData()">Import</button>
+                </div>
+                <p class="import-hint">Tip: Export a category first to see the expected column format.</p>
+                <div class="msg" id="dataMsg"></div>
             </div>
         </div>
     </main>
@@ -336,17 +382,17 @@
 
         // ── Theme presets ──
         const PRESETS = [
-            { name: 'Default Purple', start: '#667eea', end: '#764ba2', accent: '#667eea', bg: '#f5f5f5', card: '#ffffff', text: '#222222',
+            { name: 'Default Purple',    start: '#667eea', end: '#764ba2', accent: '#667eea', bg: '#f0f1f8', card: '#ffffff', text: '#1a1a1a',
               sidebarBg: '#1e293b', sidebarHeader: '#0f172a', sidebarText: '#94a3b8', sidebarTitle: '#f1f5f9' },
-            { name: 'Dark Mode',      start: '#1e293b', end: '#334155', accent: '#60a5fa', bg: '#0f172a', card: '#1e293b', text: '#f1f5f9',
+            { name: 'Dark Mode',         start: '#1e293b', end: '#334155', accent: '#60a5fa', bg: '#0f172a', card: '#1e293b', text: '#f1f5f9',
               sidebarBg: '#0f172a', sidebarHeader: '#020617', sidebarText: '#94a3b8', sidebarTitle: '#e2e8f0' },
-            { name: 'Ocean Blue',     start: '#0369a1', end: '#0284c7', accent: '#0ea5e9', bg: '#f0f9ff', card: '#ffffff', text: '#0c4a6e',
-              sidebarBg: '#0c4a6e', sidebarHeader: '#082f49', sidebarText: '#7dd3fc', sidebarTitle: '#f0f9ff' },
-            { name: 'Forest Green',   start: '#166534', end: '#15803d', accent: '#22c55e', bg: '#f0fdf4', card: '#ffffff', text: '#14532d',
+            { name: 'Professional Blue', start: '#1e3a8a', end: '#1d4ed8', accent: '#3b82f6', bg: '#eff6ff', card: '#ffffff', text: '#1e3a8a',
+              sidebarBg: '#1e3a8a', sidebarHeader: '#172554', sidebarText: '#93c5fd', sidebarTitle: '#eff6ff' },
+            { name: 'Forest Green',      start: '#166534', end: '#15803d', accent: '#22c55e', bg: '#f0fdf4', card: '#ffffff', text: '#14532d',
               sidebarBg: '#14532d', sidebarHeader: '#052e16', sidebarText: '#86efac', sidebarTitle: '#f0fdf4' },
-            { name: 'Sunset Orange',  start: '#c2410c', end: '#ea580c', accent: '#f97316', bg: '#fff7ed', card: '#ffffff', text: '#431407',
+            { name: 'Sunset Orange',     start: '#c2410c', end: '#ea580c', accent: '#f97316', bg: '#fff7ed', card: '#ffffff', text: '#431407',
               sidebarBg: '#7c2d12', sidebarHeader: '#431407', sidebarText: '#fdba74', sidebarTitle: '#fff7ed' },
-            { name: 'Rose Pink',      start: '#be123c', end: '#e11d48', accent: '#f43f5e', bg: '#fff1f2', card: '#ffffff', text: '#4c0519',
+            { name: 'Rose Pink',         start: '#be123c', end: '#e11d48', accent: '#f43f5e', bg: '#fff1f2', card: '#ffffff', text: '#4c0519',
               sidebarBg: '#881337', sidebarHeader: '#4c0519', sidebarText: '#fda4af', sidebarTitle: '#fff1f2' },
         ];
 
@@ -357,7 +403,7 @@
             { key: 'accent_color',         label: 'Accent / Buttons',      css: '--clr-accent',          def: '#667eea' },
             { key: 'bg_color',             label: 'Page Background',       css: '--clr-bg',              def: '#f5f5f5' },
             { key: 'card_color',           label: 'Card Background',       css: '--clr-card',            def: '#ffffff' },
-            { key: 'text_primary_color',   label: 'Primary Text',          css: '--clr-text-primary',    def: '#222222' },
+            { key: 'text_primary_color',   label: 'Primary Text',          css: '--clr-text-primary',    def: '#1a1a1a' },
             { key: 'text_secondary_color', label: 'Secondary Text',        css: '--clr-text-secondary',  def: '#666666' },
             { key: 'item_card_bg',         label: 'Item Card Background',  css: '--clr-item-card',       def: '#ffffff' },
             { key: 'stats_bar_bg',         label: 'Stats Bar Background',  css: '--clr-stats-bar',       def: '#ffffff' },
@@ -427,6 +473,7 @@
         function previewColor(key, cssVar, value) {
             document.documentElement.style.setProperty(cssVar, value);
             currentTheme[key] = value;
+            saveTheme();
         }
 
         function applyPreset(index) {
@@ -576,6 +623,9 @@
                 const container = document.getElementById('categoriesList');
                 if (!data || data.length === 0) {
                     container.innerHTML = '<div class="empty-msg">No categories yet. Create one from the Dashboard.</div>';
+                    // Clear import select
+                    const sel = document.getElementById('importTableSelect');
+                    sel.innerHTML = '<option value="">Select category…</option>';
                     return;
                 }
 
@@ -588,12 +638,144 @@
                         </div>
                         <div class="cat-actions">
                             <button class="cat-edit" onclick="window.location.href='inventory.html?table=${encodeURIComponent(cat.table_name)}'">Open</button>
+                            <button class="cat-export" onclick="exportCategory('${cat.table_name}', '${escapeHtml(cat.display_name)}')">Export</button>
                             <button class="cat-del" onclick="deleteCategory('${cat.table_name}', '${escapeHtml(cat.display_name)}')">Delete</button>
                         </div>
                     </div>
                 `).join('');
+
+                // Populate import dropdown
+                const sel = document.getElementById('importTableSelect');
+                sel.innerHTML = '<option value="">Select category…</option>' +
+                    data.map(cat => `<option value="${cat.table_name}">${escapeHtml(cat.display_name)}</option>`).join('');
             } catch(err) {
                 console.error('Error loading categories:', err);
+            }
+        }
+
+        // ── Export CSV ──
+        async function exportCategory(tableName, displayName) {
+            try {
+                const userId = window.currentUser?.id;
+
+                // Get field definitions (column order)
+                const { data: fields, error: fErr } = await window.db
+                    .from('field_definitions')
+                    .select('field_name, display_name')
+                    .eq('table_name', tableName)
+                    .eq('user_id', userId)
+                    .order('sort_order');
+                if (fErr) throw fErr;
+                if (!fields || fields.length === 0) {
+                    alert('No fields found for this category.');
+                    return;
+                }
+
+                // Get all items
+                const { data: items, error: iErr } = await window.db
+                    .from(tableName)
+                    .select('*')
+                    .eq('user_id', userId);
+                if (iErr) throw iErr;
+
+                // Build CSV
+                const csvQuote = v => {
+                    const s = v == null ? '' : String(v);
+                    return s.includes(',') || s.includes('\n') || s.includes('"')
+                        ? '"' + s.replace(/"/g, '""') + '"' : s;
+                };
+                const header = fields.map(f => csvQuote(f.display_name)).join(',');
+                const rows = (items || []).map(item =>
+                    fields.map(f => csvQuote(item[f.field_name])).join(',')
+                );
+                const csv = [header, ...rows].join('\n');
+
+                // Trigger download
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = displayName.replace(/[^a-z0-9]/gi, '_') + '_export.csv';
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch(err) {
+                alert('Export failed: ' + err.message);
+            }
+        }
+
+        // ── Import CSV ──
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '', inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                if (line[i] === '"') {
+                    if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+                    else { inQuotes = !inQuotes; }
+                } else if (line[i] === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += line[i];
+                }
+            }
+            result.push(current.trim());
+            return result;
+        }
+
+        async function importCategoryData() {
+            const tableName = document.getElementById('importTableSelect').value;
+            const fileInput = document.getElementById('importFileInput');
+            if (!tableName) { showMsg('dataMsg', 'Select a category first.', 'error'); return; }
+            if (!fileInput.files[0]) { showMsg('dataMsg', 'Select a CSV file.', 'error'); return; }
+
+            try {
+                const text = await fileInput.files[0].text();
+                const lines = text.trim().split('\n').filter(l => l.trim());
+                if (lines.length < 2) {
+                    showMsg('dataMsg', 'CSV must have a header row and at least one data row.', 'error');
+                    return;
+                }
+
+                const headers = parseCSVLine(lines[0]);
+                const userId = window.currentUser?.id;
+
+                // Get field definitions to map display_name → field_name
+                const { data: fields } = await window.db
+                    .from('field_definitions')
+                    .select('field_name, display_name')
+                    .eq('table_name', tableName)
+                    .eq('user_id', userId);
+
+                const fieldMap = {};
+                (fields || []).forEach(f => {
+                    fieldMap[f.display_name.toLowerCase()] = f.field_name;
+                });
+
+                // Parse data rows
+                const rows = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const values = parseCSVLine(lines[i]);
+                    if (values.every(v => !v)) continue;
+                    const row = { user_id: userId };
+                    headers.forEach((h, idx) => {
+                        const fn = fieldMap[h.toLowerCase()];
+                        if (fn) row[fn] = values[idx] || null;
+                    });
+                    rows.push(row);
+                }
+
+                if (rows.length === 0) {
+                    showMsg('dataMsg', 'No valid rows to import.', 'error');
+                    return;
+                }
+
+                const { error } = await window.db.from(tableName).insert(rows);
+                if (error) throw error;
+
+                fileInput.value = '';
+                showMsg('dataMsg', `Imported ${rows.length} item${rows.length === 1 ? '' : 's'} successfully!`, 'success');
+            } catch(err) {
+                showMsg('dataMsg', 'Import failed: ' + err.message, 'error');
             }
         }
 
@@ -651,7 +833,8 @@
             buildPresetsGrid();
             buildColorPickers();
             await syncThemeFromSupabase(); // merge AI-set values from Supabase
-            loadCategories();
+            loadCategories(); // populates Data tab + import dropdown
+            document.body.classList.add('loaded');
         });
     </script>
     <script src="ai-assistant-v4.js"></script>

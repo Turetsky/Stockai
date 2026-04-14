@@ -129,7 +129,7 @@
       <div id="ai-chat-header">
         <span style="font-size:20px">🤖</span>
         <h3>AI Assistant</h3>
-        <button id="ai-chat-close" title="Close">✕</button>
+        <button id="ai-chat-close" title="Close"><span class="close-x">✕</span><span class="close-chevron">⌄</span></button>
       </div>
       <div id="ai-chat-messages">
         <div class="ai-msg">Hi! I can help you manage inventory and customize the app. Try asking:
@@ -404,7 +404,7 @@ What would you like to do?</div>
       }
       .ai-msg {
         background: var(--clr-card, #fff);
-        color: var(--clr-text, #333);
+        color: var(--clr-text-primary, var(--clr-text, #333));
         align-self: flex-start;
         border-bottom-left-radius: 4px;
         box-shadow: 0 1px 4px rgba(0,0,0,0.08);
@@ -483,6 +483,33 @@ What would you like to do?</div>
       }
       #ai-send-btn:hover    { transform: scale(1.05); }
       #ai-send-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+      .close-chevron { display: none; font-size: 20px; line-height: 1; }
+      .close-x       { display: inline; }
+
+      @media (max-width: 639px) {
+        #ai-chat-btn {
+          bottom: 16px;
+          right: 16px;
+        }
+        #ai-chat-panel {
+          top: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          bottom: 0 !important;
+          width: 100% !important;
+          height: 100% !important;
+          border-radius: 0;
+          max-width: none;
+        }
+        .close-x       { display: none; }
+        .close-chevron { display: inline; }
+        #ai-chat-close {
+          width: 36px;
+          height: 36px;
+          font-size: 22px;
+        }
+      }
     `;
     const style       = document.createElement('style');
     style.textContent = css;

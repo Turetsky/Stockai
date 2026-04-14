@@ -81,10 +81,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('📦', style: TextStyle(fontSize: 48)),
+                    SizedBox(
+                      width: 56,
+                      height: 56,
+                      child: CustomPaint(painter: _CubeLogoPainter(color: theme.colorScheme.primary)),
+                    ),
                     const SizedBox(height: 8),
                     Text(
-                      'Inventory Manager',
+                      'StockAI',
                       style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
@@ -167,4 +171,48 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+}
+
+class _CubeLogoPainter extends CustomPainter {
+  final Color color;
+  const _CubeLogoPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = size.width * 0.06
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
+
+    final w = size.width;
+    final h = size.height;
+
+    // Hexagon outline (top/bottom/left/right vertices of a cube projection)
+    final pts = [
+      Offset(w * 0.5, h * 0.05),  // top
+      Offset(w * 0.95, h * 0.28), // top-right
+      Offset(w * 0.95, h * 0.72), // bottom-right
+      Offset(w * 0.5, h * 0.95),  // bottom
+      Offset(w * 0.05, h * 0.72), // bottom-left
+      Offset(w * 0.05, h * 0.28), // top-left
+    ];
+
+    final path = Path()..moveTo(pts[0].dx, pts[0].dy);
+    for (final p in pts.skip(1)) { path.lineTo(p.dx, p.dy); }
+    path.close();
+    canvas.drawPath(path, paint);
+
+    // Center point
+    final center = Offset(w * 0.5, h * 0.5);
+
+    // Three inner lines from center to alternating vertices (top, bottom-right, bottom-left)
+    canvas.drawLine(pts[0], center, paint);
+    canvas.drawLine(pts[2], center, paint);
+    canvas.drawLine(pts[4], center, paint);
+  }
+
+  @override
+  bool shouldRepaint(_CubeLogoPainter old) => old.color != color;
 }

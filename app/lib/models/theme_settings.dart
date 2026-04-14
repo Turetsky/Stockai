@@ -8,7 +8,7 @@ class ThemePreset {
 
 const List<ThemePreset> kThemePresets = [
   ThemePreset(name: 'Purple', seedColor: Color(0xFF667eea)),
-  ThemePreset(name: 'Ocean', seedColor: Color(0xFF0ea5e9)),
+  ThemePreset(name: 'Professional Blue', seedColor: Color(0xFF1D4ED8)),
   ThemePreset(name: 'Forest', seedColor: Color(0xFF22c55e)),
   ThemePreset(name: 'Sunset', seedColor: Color(0xFFf97316)),
   ThemePreset(name: 'Rose', seedColor: Color(0xFFec4899)),

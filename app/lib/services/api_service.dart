@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -8,15 +9,28 @@ class ApiService {
 
   final _supabase = Supabase.instance.client;
 
+  /// Refresh the session and return the access token.
+  /// Throws [SessionExpiredException] if the refresh token is invalid.
+  Future<String> _freshToken() async {
+    try {
+      final authResponse = await _supabase.auth.refreshSession();
+      final token = authResponse.session?.accessToken;
+      if (token == null) throw SessionExpiredException();
+      return token;
+    } catch (e) {
+      if (e is SessionExpiredException) rethrow;
+      // AuthApiException with refresh_token_not_found or similar
+      await _supabase.auth.signOut();
+      throw SessionExpiredException();
+    }
+  }
+
   Future<String> sendMessage(
     String message, {
     bool concise = false,
     List<Map<String, String>> history = const [],
   }) async {
-    // Use refreshSession() for a fresh JWT per CLAUDE.md critical pattern
-    final authResponse = await _supabase.auth.refreshSession();
-    final session = authResponse.session;
-    if (session == null) throw Exception('Not authenticated');
+    final accessToken = await _freshToken();
 
     String finalMessage;
     if (history.isNotEmpty) {
@@ -39,7 +53,7 @@ class ApiService {
       Uri.parse(_edgeFunctionUrl),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${session.accessToken}',
+        'Authorization': 'Bearer $accessToken',
       },
       body: jsonEncode({
         'message': finalMessage,
@@ -58,31 +72,44 @@ class ApiService {
     return data['message'] ?? data['content']?[0]?['text'] ?? 'No response';
   }
 
-  Future<void> deleteAccount() async {
-    final authResponse = await _supabase.auth.refreshSession();
-    final session = authResponse.session;
-    if (session == null) throw Exception('Not authenticated');
-
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) throw Exception('Not authenticated');
-
-    final response = await http.post(
-      Uri.parse(_edgeFunctionUrl),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${session.accessToken}',
-      },
-      body: jsonEncode({
-        'tool_call': {
-          'name': 'run_sql',
-          'input': {'sql': "DELETE FROM auth.users WHERE id = '$userId'"},
-        },
-      }),
+  Future<Uint8List> synthesizeSpeech(
+    String text, {
+    String voiceId = 'EXAVITQu4vr4xnSDxMaL', // Sarah — premade, free tier
+    double stability = 0.5,
+    double similarityBoost = 0.75,
+  }) async {
+    final request = http.Request(
+      'POST',
+      Uri.parse(
+          'https://api.elevenlabs.io/v1/text-to-speech/$voiceId/stream'),
     );
+    request.headers.addAll({
+      'xi-api-key': 'sk_06e876556112608c5c8a65f10e043f544c869786d6df6c60',
+      'Content-Type': 'application/json',
+      'Accept': 'audio/mpeg',
+    });
+    request.body = jsonEncode({
+      'text': text,
+      'model_id': 'eleven_flash_v2_5',
+      'voice_settings': {
+        'stability': stability,
+        'similarity_boost': similarityBoost,
+      },
+    });
 
-    if (response.statusCode != 200) {
-      throw Exception('Failed to delete account');
+    final streamedResponse = await request.send();
+    if (streamedResponse.statusCode != 200) {
+      final body = await streamedResponse.stream.bytesToString();
+      throw Exception('TTS error ${streamedResponse.statusCode}: $body');
     }
+    return await streamedResponse.stream.toBytes();
+  }
+
+  Future<void> deleteAccount() async {
+    // Calls the delete_user_account() Postgres function directly via RPC.
+    // That function runs as SECURITY INVOKER and deletes auth.users WHERE id = auth.uid(),
+    // which cascades to all user data via ON DELETE CASCADE triggers.
+    await _supabase.rpc('delete_user_account');
   }
 
   Future<void> _directToolCall(
@@ -110,52 +137,44 @@ class ApiService {
 
   Future<void> addField(String tableName, String fieldName, String displayName,
       String fieldType) async {
-    final authResponse = await _supabase.auth.refreshSession();
-    final session = authResponse.session;
-    if (session == null) throw Exception('Not authenticated');
+    final token = await _freshToken();
     await _directToolCall('add_field', {
       'table_name': tableName,
       'field_name': fieldName,
       'display_name': displayName,
       'field_type': fieldType,
-    }, session.accessToken);
+    }, token);
   }
 
   Future<void> removeField(String tableName, String fieldName) async {
-    final authResponse = await _supabase.auth.refreshSession();
-    final session = authResponse.session;
-    if (session == null) throw Exception('Not authenticated');
+    final token = await _freshToken();
     await _directToolCall('remove_field', {
       'table_name': tableName,
       'field_name': fieldName,
-    }, session.accessToken);
+    }, token);
   }
 
   Future<void> updateField(
       String tableName, String fieldName, String displayName,
       {String? newFieldType}) async {
-    final authResponse = await _supabase.auth.refreshSession();
-    final session = authResponse.session;
-    if (session == null) throw Exception('Not authenticated');
+    final token = await _freshToken();
     final input = <String, dynamic>{
       'table_name': tableName,
       'field_name': fieldName,
       'new_display_name': displayName,
       if (newFieldType != null) 'new_field_type': newFieldType,
     };
-    await _directToolCall('rename_field', input, session.accessToken);
+    await _directToolCall('rename_field', input, token);
   }
 
   Future<void> deleteCategory(String tableName) async {
-    final authResponse = await _supabase.auth.refreshSession();
-    final session = authResponse.session;
-    if (session == null) throw Exception('Not authenticated');
+    final token = await _freshToken();
 
     final response = await http.post(
       Uri.parse(_edgeFunctionUrl),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${session.accessToken}',
+        'Authorization': 'Bearer $token',
       },
       body: jsonEncode({
         'message':
@@ -168,4 +187,9 @@ class ApiService {
       throw Exception('API error: ${response.statusCode}');
     }
   }
+}
+
+class SessionExpiredException implements Exception {
+  @override
+  String toString() => 'Session expired. Please log in again.';
 }

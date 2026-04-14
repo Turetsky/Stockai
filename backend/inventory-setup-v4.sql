@@ -388,15 +388,47 @@ CREATE TRIGGER on_auth_user_deleted
   FOR EACH ROW EXECUTE FUNCTION cleanup_user_data();
 
 
+-- ── RECYCLING BIN ────────────────────────────────────────────
+-- Soft-deleted items land here. Auto-purged after 30 days
+-- (triggered by the edge function on each delete_item call).
+CREATE TABLE IF NOT EXISTS recycling_bin (
+    id           uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id      uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    source_table text        NOT NULL,
+    item_id      uuid,
+    item_data    jsonb       NOT NULL,
+    deleted_at   timestamptz DEFAULT NOW() NOT NULL
+);
+
+ALTER TABLE recycling_bin ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "rb_select" ON recycling_bin;
+DROP POLICY IF EXISTS "rb_insert" ON recycling_bin;
+DROP POLICY IF EXISTS "rb_delete" ON recycling_bin;
+
+CREATE POLICY "rb_select" ON recycling_bin FOR SELECT
+    USING (auth.uid() IS NOT NULL AND user_id = auth.uid());
+
+CREATE POLICY "rb_insert" ON recycling_bin FOR INSERT
+    WITH CHECK (auth.uid() IS NOT NULL AND user_id = auth.uid());
+
+CREATE POLICY "rb_delete" ON recycling_bin FOR DELETE
+    USING (auth.uid() IS NOT NULL AND user_id = auth.uid());
+
+CREATE INDEX IF NOT EXISTS recycling_bin_user_deleted
+    ON recycling_bin (user_id, deleted_at);
+
+
 -- ── DONE ────────────────────────────────────────────────────
 -- Summary of security model:
 --
---   profiles        → user sees/edits only their own row
+--   profiles          → user sees/edits only their own row
 --   table_definitions → strict per-user RLS (NULL-safe), user_id NOT NULL
 --   field_definitions → SELECT via ownership join to table_definitions;
 --                        INSERT/UPDATE/DELETE only via service role (edge function)
---   ui_settings     → strict per-user RLS (NULL-safe), user_id NOT NULL
---   exec_sql()      → service_role only, used for DDL from edge function
+--   ui_settings       → strict per-user RLS (NULL-safe), user_id NOT NULL
+--   recycling_bin     → per-user RLS; items auto-purged after 30 days by edge function
+--   exec_sql()        → service_role only, used for DDL from edge function
 --
 --   Dynamic item tables (created by edge function via exec_sql):
 --     Each gets: id uuid PK, user_id uuid NOT NULL, created_at,

@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <linearGradient id="boxGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#e8e0ff;stop-opacity:1"/>
+    </linearGradient>
+    <linearGradient id="lidGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#d4c8ff;stop-opacity:1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background with rounded corners -->
+  <rect width="1024" height="1024" rx="220" ry="220" fill="url(#bg)"/>
+
+  <!-- Box body -->
+  <rect x="240" y="490" width="544" height="360" rx="28" ry="28" fill="url(#boxGrad)"/>
+
+  <!-- Box lid -->
+  <path d="M210 420 Q212 380 260 370 L764 370 Q812 380 814 420 L814 490 L210 490 Z"
+        fill="url(#lidGrad)" rx="20"/>
+
+  <!-- Lid center flap -->
+  <path d="M430 370 L430 450 Q512 480 594 450 L594 370 Z"
+        fill="rgba(118,75,162,0.18)"/>
+
+  <!-- Box stripe / tape -->
+  <rect x="460" y="490" width="104" height="360" fill="rgba(102,126,234,0.13)" rx="4"/>
+
+  <!-- AI spark / circuit node — top left -->
+  <circle cx="348" cy="580" r="22" fill="#667eea" opacity="0.85"/>
+  <line x1="348" y1="602" x2="348" y2="660" stroke="#667eea" stroke-width="10" stroke-linecap="round" opacity="0.6"/>
+  <line x1="348" y1="660" x2="420" y2="660" stroke="#667eea" stroke-width="10" stroke-linecap="round" opacity="0.6"/>
+  <circle cx="420" cy="660" r="14" fill="#764ba2" opacity="0.75"/>
+
+  <!-- AI spark — right side -->
+  <circle cx="676" cy="620" r="22" fill="#667eea" opacity="0.85"/>
+  <line x1="676" y1="642" x2="676" y2="700" stroke="#667eea" stroke-width="10" stroke-linecap="round" opacity="0.6"/>
+  <line x1="604" y1="700" x2="676" y2="700" stroke="#667eea" stroke-width="10" stroke-linecap="round" opacity="0.6"/>
+  <circle cx="604" cy="700" r="14" fill="#764ba2" opacity="0.75"/>
+
+  <!-- Small dot accents -->
+  <circle cx="348" cy="760" r="12" fill="#667eea" opacity="0.5"/>
+  <circle cx="676" cy="800" r="12" fill="#667eea" opacity="0.5"/>
+
+  <!-- Star / AI sparkle top right of box -->
+  <g transform="translate(680, 290) scale(0.9)">
+    <polygon points="0,-38 9,-12 36,-12 15,5 23,31 0,16 -23,31 -15,5 -36,-12 -9,-12"
+             fill="white" opacity="0.92"/>
+  </g>
+
+  <!-- Small sparkle top left -->
+  <g transform="translate(344, 310) scale(0.6)">
+    <polygon points="0,-38 9,-12 36,-12 15,5 23,31 0,16 -23,31 -15,5 -36,-12 -9,-12"
+             fill="white" opacity="0.7"/>
+  </g>
+</svg>

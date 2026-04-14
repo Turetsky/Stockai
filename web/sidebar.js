@@ -38,13 +38,18 @@
     }
     // Extract leading emoji as logo; strip it from the title to avoid doubling
     // e.g. app_name "📦 Inventory Manager" → logo "📦", title "Inventory Manager"
-    const rawName = theme.app_name || 'Inventory Manager';
+    // Migration: treat legacy "Inventory Manager" name and 📦 emoji as unset
+    const rawName = theme.app_name || 'StockAI';
     const emojiMatch = rawName.match(/^(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u);
-    window.appLogo = emojiMatch ? emojiMatch[0] : '';
-    window.appName = rawName.replace(/^(\p{Emoji_Presentation}|\p{Extended_Pictographic})\s*/u, '').trim() || rawName;
+    const extractedEmoji = emojiMatch ? emojiMatch[0] : '';
+    const extractedTitle = rawName.replace(/^(\p{Emoji_Presentation}|\p{Extended_Pictographic})\s*/u, '').trim() || rawName;
+    // Suppress legacy defaults so new SVG logo + StockAI name shows instead
+    const legacyNames = ['Inventory Manager', 'inventory manager'];
+    window.appLogo = (extractedEmoji === '📦') ? '' : extractedEmoji;
+    window.appName = legacyNames.includes(extractedTitle) ? 'StockAI' : (extractedTitle || 'StockAI');
   } catch (e) {
     window.appLogo = '';
-    window.appName = 'Inventory Manager';
+    window.appName = 'StockAI';
   }
 
   // ============================================================================
@@ -581,7 +586,7 @@
       return 'Inventory';
     }
     if (path.includes('settings.html')) return 'Settings';
-    return 'Inventory Manager';
+    return 'StockAI';
   }
 
   /**
@@ -621,12 +626,13 @@
     // Header
     const header = document.createElement('div');
     header.className = 'sidebar-header';
-    // Build header: single logo icon (if any) + text title – never both
-    const titleText = window.appName || 'Inventory Manager';
+    // Build header: SVG cube logo (or custom emoji) + text title
+    const titleText = window.appName || 'StockAI';
     const logoEmoji = window.appLogo || '';
+    const defaultLogoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" style="width:28px;height:28px;flex-shrink:0"><polygon points="50,10 90,30 90,70 50,90 10,70 10,30"/><polyline points="10,30 50,50 90,30"/><line x1="50" y1="50" x2="50" y2="90"/></svg>`;
     header.innerHTML = logoEmoji
       ? `<div class="sidebar-logo">${logoEmoji}</div><div class="sidebar-title">${titleText}</div>`
-      : `<div class="sidebar-title">${titleText}</div>`;
+      : `<div class="sidebar-logo">${defaultLogoSvg}</div><div class="sidebar-title">${titleText}</div>`;
     sidebar.appendChild(header);
 
     // Navigation
@@ -699,6 +705,13 @@
     contactLink.appendChild(contactIcon);
     contactLink.appendChild(contactText);
     nav.appendChild(contactLink);
+
+    const aboutLink = document.createElement('a');
+    aboutLink.className = 'nav-item';
+    aboutLink.href = 'about.html';
+    aboutLink.style.cssText = 'text-decoration:none;';
+    aboutLink.innerHTML = '<span class="nav-icon">ℹ️</span><span>About</span>';
+    nav.appendChild(aboutLink);
 
     sidebar.appendChild(nav);
 
@@ -1016,8 +1029,8 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           access_key: 'dd653064-1a32-4524-b218-08a1b972c011',
-          subject: 'Inventory App Feedback from ' + (window.currentUser?.email || 'unknown'),
-          from_name: window.currentUser?.email || 'Inventory App User',
+          subject: 'StockAI Feedback from ' + (window.currentUser?.email || 'unknown'),
+          from_name: window.currentUser?.email || 'StockAI User',
           email: window.currentUser?.email || 'noreply@example.com',
           message,
         }),

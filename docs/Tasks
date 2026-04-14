@@ -1,0 +1,53 @@
+🛠️ StockAI Development Plan
+
+1. Visual Refresh & Branding
+Asset Update: Replace all instances of the old logo and slogan with the "new logo" and "new slogan" from your screenshots.
+
+Splash Screen: Implement a high-fidelity startup screen featuring the new branding.
+
+Side Panel: Update the side panel's top header to reflect the new visual identity.
+
+2. Theme Engine & Dashboard Fixes
+High-Contrast Light Mode: Set base text to #1A1A1A. Replace heavy borders with soft box-shadow for elevation.
+
+Professional Blue Mode: Shift the pastel blue to a deeper Cobalt/Slate Blue to fix readability.
+
+Dashboard Theme Fix: Resolve the specific "dashboard theme issue" from your screenshot (likely fixing background/card color mismatch).
+
+Web Theme Auto-Save: Implement an onChange listener for theme selection. When a user clicks a theme (e.g., Rose Pink), it will trigger the save function immediately, removing the need for the "Save" button.
+
+3. Category & Inventory Logic (The "Anchor Duo")
+Category Screen Rewrite: Scraping the current confusing UI. I will model the new Category screen after your Settings screen—clean, list-based, and intuitive.
+
+The "Required Duo":
+
+Field 1 (Identity): Locked as the primary name.
+
+Field 2 (Count): Locked as the numeric quantity.
+
+Both will be visually marked with a "Required" tag or asterisk.
+
+Star Removal: Deleting the star icon logic entirely since Field 1 is now the permanent title.
+
+Dynamic Customization: Allow users to rename these labels and add/edit custom fields via a simplified list UI.
+
+4. ElevenLabs TTS Integration
+Latency Optimization: Transition to the /v1/text-to-speech/{voice_id}/stream endpoint.
+
+Real-Time Params: Ensure stability and similarity_boost sliders are captured at the moment of the "Play" click.
+
+Environment Check: Audit API keys and Voice IDs to fix the "no-sound" bug.
+
+5. Web & Mobile Optimization
+Settings Layout: Reorganize into three clear tabs: Theme, Profile, and Data.
+
+Data Portability: Add "Export" and "Import" functionality to the Web Data tab (matching the app's capability).
+
+Mobile Chat UI: Reposition the AI chat. The icon will now trigger a full-screen overlay with a downward arrow to minimize, preventing it from crowding the inventory view.
+
+About Page: Create the "About" page accessible from the sidebar and the login screen. It will explain the vision behind StockAI and its current development status.
+
+6. Backend: AI Recycling Bin
+Soft Delete: Items deleted will move to a recycling_bin table.
+
+Auto-Cleanup: A background process (simulated AI management) will purge items older than 30 days. Note: For now, there will be no user-facing UI for this.

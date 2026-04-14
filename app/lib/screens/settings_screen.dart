@@ -703,6 +703,10 @@ class _ProfileTab extends StatelessWidget {
               : const Text('Save Name'),
         ),
         const SizedBox(height: 24),
+        Text('AI Voice', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 12),
+        const _VoiceSection(),
+        const SizedBox(height: 24),
         Text('Password', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 12),
         const _PasswordSection(),
@@ -749,6 +753,149 @@ class _ProfileTab extends StatelessWidget {
             foregroundColor: Theme.of(context).colorScheme.error,
             side: BorderSide(color: Theme.of(context).colorScheme.error),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Voice Section
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _VoiceSection extends StatefulWidget {
+  const _VoiceSection();
+
+  @override
+  State<_VoiceSection> createState() => _VoiceSectionState();
+}
+
+class _VoiceSectionState extends State<_VoiceSection> {
+  static const _voices = [
+    {'id': 'EXAVITQu4vr4xnSDxMaL', 'name': 'Sarah — Female, Mature'},
+    {'id': 'FGY2WhTYpPnrIDTdsKH5', 'name': 'Laura — Female, Quirky'},
+    {'id': 'Xb7hH8MSUJpSbSDYk0k2', 'name': 'Alice — Female, Clear'},
+    {'id': 'XrExE9yKIg1WjnnlVkGX', 'name': 'Matilda — Female, Professional'},
+    {'id': 'cgSgspJ2msm6clMCkdW9', 'name': 'Jessica — Female, Playful'},
+    {'id': 'pFZP5JQG7iQjIQuC4Bku', 'name': 'Lily — Female, Velvety'},
+    {'id': 'nPczCjzI2devNBz1zQrb', 'name': 'Brian — Male, Deep'},
+    {'id': 'CwhRBWXzGAHq8TQ4Fs17', 'name': 'Roger — Male, Laid-Back'},
+    {'id': 'IKne3meq5aSn9XLyUdCD', 'name': 'Charlie — Male, Confident'},
+    {'id': 'TX3LPaxmHKxFdv7VOQHJ', 'name': 'Liam — Male, Energetic'},
+    {'id': 'onwK4e9ZLuTAKqWW03F9', 'name': 'Daniel — Male, Broadcaster'},
+    {'id': 'pNInz6obpgDQGcFmaJgB', 'name': 'Adam — Male, Firm'},
+  ];
+
+  final _supabaseService = SupabaseService();
+  String _selectedVoiceId = 'EXAVITQu4vr4xnSDxMaL'; // Sarah — free tier
+  double _stability = 0.5;
+  double _similarityBoost = 0.75;
+  bool _loading = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVoiceSettings();
+  }
+
+  Future<void> _loadVoiceSettings() async {
+    final settings = await _supabaseService.getUiSettings();
+    if (!mounted) return;
+    setState(() {
+      final v = settings['tts_voice_id'];
+      if (v != null && v.isNotEmpty) _selectedVoiceId = v;
+      final stab = double.tryParse(settings['tts_stability'] ?? '');
+      if (stab != null) _stability = stab.clamp(0.0, 1.0);
+      final sim = double.tryParse(settings['tts_similarity_boost'] ?? '');
+      if (sim != null) _similarityBoost = sim.clamp(0.0, 1.0);
+      _loading = false;
+    });
+  }
+
+  Future<void> _saveVoice(String voiceId) async {
+    setState(() { _selectedVoiceId = voiceId; _saving = true; });
+    await _supabaseService.setUiSetting('tts_voice_id', voiceId);
+    if (mounted) setState(() => _saving = false);
+  }
+
+  Future<void> _saveStability(double val) async {
+    setState(() => _stability = val);
+    await _supabaseService.setUiSetting('tts_stability', val.toStringAsFixed(2));
+  }
+
+  Future<void> _saveSimilarity(double val) async {
+    setState(() => _similarityBoost = val);
+    await _supabaseService.setUiSetting(
+        'tts_similarity_boost', val.toStringAsFixed(2));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (_loading) return const LinearProgressIndicator();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          initialValue: _selectedVoiceId,
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            prefixIcon: const Icon(Icons.record_voice_over),
+            suffixIcon: _saving
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                : null,
+          ),
+          items: _voices
+              .map((v) => DropdownMenuItem(
+                    value: v['id'],
+                    child: Text(v['name']!),
+                  ))
+              .toList(),
+          onChanged: (id) { if (id != null) _saveVoice(id); },
+        ),
+        const SizedBox(height: 20),
+        // Stability slider
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Stability', style: theme.textTheme.bodyMedium),
+            Text(_stability.toStringAsFixed(2),
+                style: TextStyle(
+                    fontSize: 13, color: theme.colorScheme.outline)),
+          ],
+        ),
+        Slider(
+          value: _stability,
+          min: 0,
+          max: 1,
+          divisions: 20,
+          onChangeEnd: _saveStability,
+          onChanged: (v) => setState(() => _stability = v),
+        ),
+        // Similarity Boost slider
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Similarity Boost', style: theme.textTheme.bodyMedium),
+            Text(_similarityBoost.toStringAsFixed(2),
+                style: TextStyle(
+                    fontSize: 13, color: theme.colorScheme.outline)),
+          ],
+        ),
+        Slider(
+          value: _similarityBoost,
+          min: 0,
+          max: 1,
+          divisions: 20,
+          onChangeEnd: _saveSimilarity,
+          onChanged: (v) => setState(() => _similarityBoost = v),
         ),
       ],
     );

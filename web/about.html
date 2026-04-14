@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About - StockAI</title>
+    <script>
+    (function(){try{var t=JSON.parse(localStorage.getItem('inv_theme')||'{}'),r=document.documentElement,m={primary_color_start:'--clr-start',primary_color_end:'--clr-end',accent_color:'--clr-accent',bg_color:'--clr-bg',card_color:'--clr-card',text_primary_color:'--clr-text-primary',text_secondary_color:'--clr-text-secondary'};for(var k in m)if(t[k])r.style.setProperty(m[k],t[k])}catch(e){}})();
+    </script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
+    <style>
+        :root {
+            --clr-start: #667eea;
+            --clr-end: #764ba2;
+            --clr-accent: #667eea;
+            --clr-bg: #f5f5f5;
+            --clr-card: #ffffff;
+            --clr-text-primary: #1a1a1a;
+            --clr-text-secondary: #666;
+            --card-radius: 12px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--clr-bg);
+            color: var(--clr-text-primary);
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+        body.loaded { opacity: 1; }
+
+        .main-content {
+            padding: 40px 28px;
+            max-width: 680px;
+        }
+
+        .about-hero {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+        .about-logo {
+            margin-bottom: 20px;
+        }
+        .about-title {
+            font-size: 36px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--clr-start), var(--clr-end));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+        .about-slogan {
+            font-size: 18px;
+            color: var(--clr-text-secondary);
+            font-weight: 400;
+        }
+
+        .section-card {
+            background: var(--clr-card);
+            border-radius: var(--card-radius);
+            padding: 28px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.06);
+            margin-bottom: 20px;
+        }
+        .section-card h3 {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: var(--clr-text-primary);
+        }
+        .section-card p {
+            font-size: 14px;
+            line-height: 1.7;
+            color: var(--clr-text-secondary);
+            margin-bottom: 10px;
+        }
+        .section-card p:last-child { margin-bottom: 0; }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 14px;
+            margin-top: 4px;
+        }
+        .feature-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .feature-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+        .feature-text {
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--clr-text-secondary);
+        }
+        .feature-text strong {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--clr-text-primary);
+            margin-bottom: 2px;
+        }
+
+        .version-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--clr-start), var(--clr-end));
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 20px;
+            margin-bottom: 16px;
+        }
+
+        .cta-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+        .btn {
+            padding: 10px 22px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--clr-start), var(--clr-end));
+            color: white;
+        }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+        .btn-outline {
+            background: none;
+            border: 2px solid #e0e0e0;
+            color: var(--clr-text-primary);
+        }
+        .btn-outline:hover { border-color: var(--clr-accent); color: var(--clr-accent); }
+
+        @media (max-width: 600px) {
+            .main-content { padding: 24px 16px; }
+            .about-title { font-size: 28px; }
+            .feature-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <main class="main-content" id="mainContent">
+        <div class="about-hero">
+            <div class="about-logo">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" stroke="url(#aboutGrad)" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round" style="width:64px;height:64px">
+                    <defs>
+                        <linearGradient id="aboutGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="var(--clr-start)"/>
+                            <stop offset="100%" stop-color="var(--clr-end)"/>
+                        </linearGradient>
+                    </defs>
+                    <polygon points="50,10 90,30 90,70 50,90 10,70 10,30"/>
+                    <polyline points="10,30 50,50 90,30"/>
+                    <line x1="50" y1="50" x2="50" y2="90"/>
+                </svg>
+            </div>
+            <div class="about-title">StockAI</div>
+            <div class="about-slogan">The database that builds itself.</div>
+        </div>
+
+        <div class="section-card">
+            <span class="version-badge">Version 4.0</span>
+            <h3>What is StockAI?</h3>
+            <p>StockAI is an AI-powered inventory management platform that lets you build and manage custom databases using plain language — no spreadsheets, no complex software.</p>
+            <p>Tell the AI what you want to track and it creates the structure for you. Add items, run reports, and adjust the layout, all through conversation.</p>
+        </div>
+
+        <div class="section-card">
+            <h3>Key Features</h3>
+            <div class="feature-grid">
+                <div class="feature-item">
+                    <span class="feature-icon">🤖</span>
+                    <div class="feature-text">
+                        <strong>AI-Powered</strong>
+                        Natural language commands to create, edit, and query your inventory.
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">📂</span>
+                    <div class="feature-text">
+                        <strong>Custom Categories</strong>
+                        Define any type of inventory — from cables to cars to collectibles.
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">🎨</span>
+                    <div class="feature-text">
+                        <strong>Fully Themeable</strong>
+                        Customize every color and the AI can restyle the app on command.
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">📱</span>
+                    <div class="feature-text">
+                        <strong>Web + Mobile</strong>
+                        Use the web app or the native mobile app — your data syncs everywhere.
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">🔒</span>
+                    <div class="feature-text">
+                        <strong>Private by Design</strong>
+                        Your data is isolated — no other user can see or access it.
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">📤</span>
+                    <div class="feature-text">
+                        <strong>Import & Export</strong>
+                        Move data in and out as CSV any time you need.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-card">
+            <h3>Get Started</h3>
+            <p>Sign in to start managing your inventory, or send feedback if you have ideas or found a bug.</p>
+            <div class="cta-row">
+                <a href="index.html" class="btn btn-primary">Go to Dashboard</a>
+                <a href="landing.html" class="btn btn-outline">Sign In</a>
+            </div>
+        </div>
+    </main>
+
+    <script src="sidebar.js"></script>
+    <script>
+        window.addEventListener('sidebar-ready', () => {
+            document.body.classList.add('loaded');
+        });
+        // If sidebar doesn't fire (unauthenticated), still show content
+        setTimeout(() => document.body.classList.add('loaded'), 500);
+    </script>
+    <script src="ai-assistant-v4.js"></script>
+</body>
+</html>

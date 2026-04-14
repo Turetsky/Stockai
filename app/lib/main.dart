@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'models/theme_settings.dart';
 import 'services/supabase_service.dart';
-import 'screens/login_screen.dart';
-import 'screens/chat_screen.dart';
+import 'screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -119,6 +119,12 @@ ThemeData _buildTheme(
             ? Color.lerp(accentOverride, Colors.white, 0.2)
             : null,
       ),
+      appBarTheme: AppBarTheme(
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+        ),
+      ),
       useMaterial3: true,
     );
   }
@@ -129,6 +135,12 @@ ThemeData _buildTheme(
       tertiary: accentOverride != null
           ? Color.lerp(accentOverride, Colors.black, 0.2)
           : null,
+    ),
+    appBarTheme: const AppBarTheme(
+      systemOverlayStyle: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+      ),
     ),
     useMaterial3: true,
   );
@@ -143,14 +155,12 @@ class InventoryManagerApp extends StatelessWidget {
       valueListenable: themeNotifier,
       builder: (context, settings, _) {
         return MaterialApp(
-          title: 'Inventory Manager',
+          title: 'StockAI',
           debugShowCheckedModeBanner: false,
           themeMode: settings.mode,
           theme: _buildTheme(settings.seedColor, Brightness.light, settings.customColors),
           darkTheme: _buildTheme(settings.seedColor, Brightness.dark, settings.customColors),
-          home: supabase.auth.currentSession != null
-              ? const ChatScreen()
-              : const LoginScreen(),
+          home: const SplashScreen(),
         );
       },
     );

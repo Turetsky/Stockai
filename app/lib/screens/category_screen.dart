@@ -17,7 +17,6 @@ class CategoryScreen extends StatefulWidget {
 class _CategoryScreenState extends State<CategoryScreen> {
   final _supabaseService = SupabaseService();
   late Future<_CategoryData> _dataFuture;
-  String? _titleField; // cached so _showManageSheet can use it without async
 
   String get _tableName => widget.category['table_name'] as String;
   String get _displayName =>
@@ -38,9 +37,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   Future<_CategoryData> _loadData() async {
     final fields = await _supabaseService.getFieldDefinitions(_tableName);
     final items = await _supabaseService.getItems(_tableName);
-    final settings = await _supabaseService.getUiSettings();
-    _titleField = settings['${_tableName}_title_field'];
-    return _CategoryData(fields: fields, items: items, titleField: _titleField);
+    return _CategoryData(fields: fields, items: items);
   }
 
   List<Map<String, dynamic>> _userFields(List<Map<String, dynamic>> fields) {
@@ -50,22 +47,24 @@ class _CategoryScreenState extends State<CategoryScreen> {
         .toList();
   }
 
+  // Field 1 (index 0) is always the item title.
+  String _itemTitle(
+      Map<String, dynamic> item, List<Map<String, dynamic>> fields) {
+    final userFields = _userFields(fields);
+    if (userFields.isEmpty) return item['id']?.toString() ?? 'Item';
+    final titleField = userFields.first;
+    final key = titleField['field_name'] as String? ?? '';
+    final val = item[key]?.toString() ?? '';
+    return val.isNotEmpty ? val : 'Item';
+  }
+
+  // Show remaining fields (skip title) as a subtitle.
   String _itemSummary(
       Map<String, dynamic> item, List<Map<String, dynamic>> fields) {
     final userFields = _userFields(fields);
-    if (userFields.isEmpty) return item['id']?.toString() ?? '';
-    // Determine which field is used as the title so we can skip it
-    final titleField = userFields.firstWhere(
-      (f) {
-        final fn = (f['field_name'] as String? ?? '').toLowerCase();
-        final dn = (f['display_name'] as String? ?? '').toLowerCase();
-        return fn.contains('name') || dn.contains('name');
-      },
-      orElse: () => userFields.first,
-    );
-    final titleKey = titleField['field_name'] as String? ?? '';
+    if (userFields.length <= 1) return '';
     final parts = userFields
-        .where((f) => (f['field_name'] as String? ?? '') != titleKey)
+        .skip(1)
         .take(3)
         .map((f) {
           final name = f['field_name'] as String? ?? '';
@@ -76,41 +75,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
         .whereType<String>()
         .toList();
     return parts.join(' · ');
-  }
-
-  String _itemTitle(
-      Map<String, dynamic> item, List<Map<String, dynamic>> fields, {String? titleField}) {
-    final userFields = _userFields(fields);
-    if (userFields.isEmpty) return item['id']?.toString() ?? 'Item';
-    // Explicit title field set by user takes priority
-    if (titleField != null) {
-      final val = item[titleField]?.toString() ?? '';
-      if (val.isNotEmpty) return val;
-    }
-    // Priority: field containing "name" or "title" in its name/label
-    const titleKeywords = ['name', 'title', 'label', 'subject', 'product'];
-    for (final keyword in titleKeywords) {
-      final match = userFields.firstWhere(
-        (f) {
-          final fn = (f['field_name'] as String? ?? '').toLowerCase();
-          final dn = (f['display_name'] as String? ?? '').toLowerCase();
-          return fn.contains(keyword) || dn.contains(keyword);
-        },
-        orElse: () => {},
-      );
-      if (match.isNotEmpty) {
-        final key = match['field_name'] as String? ?? '';
-        final val = item[key]?.toString() ?? '';
-        if (val.isNotEmpty) return val;
-      }
-    }
-    // Fallback: first field with a non-empty value
-    for (final f in userFields) {
-      final key = f['field_name'] as String? ?? '';
-      final val = item[key]?.toString() ?? '';
-      if (val.isNotEmpty) return val;
-    }
-    return 'Item';
   }
 
   Future<void> _showItemSheet(
@@ -128,6 +92,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
     final goManage = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -158,6 +123,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -165,7 +131,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
         category: widget.category,
         fields: _userFields(fields),
         onChanged: _reload,
-        titleField: _titleField,
       ),
     );
   }
@@ -178,7 +143,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
       return userFields
           .map((f) {
             final val = item[f['field_name']]?.toString() ?? '';
-            // Escape commas and quotes for CSV
             if (val.contains(',') || val.contains('"') || val.contains('\n')) {
               return '"${val.replaceAll('"', '""')}"';
             }
@@ -223,7 +187,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
     final headers = _parseCsvRow(lines[0]);
     final userFields = _userFields(fields);
 
-    // Map CSV column index → field_name (case-insensitive match on display_name or field_name)
     final colToField = <int, String>{};
     for (int i = 0; i < headers.length; i++) {
       final header = headers[i].toLowerCase();
@@ -309,10 +272,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                   IconButton(
                     icon: const Icon(Icons.tune),
                     tooltip: 'Manage Category',
-                    onPressed: () {
-                      _titleField = snapshot.data!.titleField;
-                      _showManageSheet(snapshot.data!.fields);
-                    },
+                    onPressed: () => _showManageSheet(snapshot.data!.fields),
                   ),
                   IconButton(
                     icon: const Icon(Icons.upload),
@@ -383,7 +343,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
             separatorBuilder: (_, __) => const SizedBox(height: 4),
             itemBuilder: (context, index) {
               final item = items[index];
-              final title = _itemTitle(item, data.fields, titleField: data.titleField);
+              final title = _itemTitle(item, data.fields);
               final subtitle = _itemSummary(item, data.fields);
 
               final itemId = item['id'].toString();
@@ -409,7 +369,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 ),
                 confirmDismiss: (direction) async {
                   if (direction == DismissDirection.endToStart) {
-                    // Swipe left → delete
                     return await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
@@ -431,7 +390,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
                       ),
                     );
                   } else {
-                    // Swipe right → edit (open sheet, don't dismiss)
                     _showItemSheet(data.fields, existing: item);
                     return false;
                   }
@@ -471,23 +429,22 @@ class _CategoryScreenState extends State<CategoryScreen> {
 class _CategoryData {
   final List<Map<String, dynamic>> fields;
   final List<Map<String, dynamic>> items;
-  final String? titleField;
-  const _CategoryData({required this.fields, required this.items, this.titleField});
+  const _CategoryData({required this.fields, required this.items});
 }
 
-// ---------- Manage Category Sheet ----------
+// ─────────────────────────────────────────────────────────────
+//  Manage Category Sheet  (clean, settings-style)
+// ─────────────────────────────────────────────────────────────
 
 class _ManageCategorySheet extends StatefulWidget {
   final Map<String, dynamic> category;
   final List<Map<String, dynamic>> fields;
   final VoidCallback onChanged;
-  final String? titleField;
 
   const _ManageCategorySheet({
     required this.category,
     required this.fields,
     required this.onChanged,
-    this.titleField,
   });
 
   @override
@@ -500,20 +457,17 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
   late List<Map<String, dynamic>> _fields;
   String? _busyField;
   bool _busyCategory = false;
-
-  // Inline edit state
   bool _editingCategory = false;
   late TextEditingController _categoryController;
-  String? _editingField; // field_name currently being renamed inline
-  final Map<String, TextEditingController> _fieldControllers = {};
-  final Map<String, String> _editingFieldTypes = {}; // fieldName → new type during edit
-  String? _titleField; // which field is the primary display field
+
+  String get _tableName => widget.category['table_name'] as String;
+  String get _displayName =>
+      widget.category['display_name'] as String? ?? _tableName;
 
   @override
   void initState() {
     super.initState();
     _fields = List.from(widget.fields);
-    _titleField = widget.titleField;
     _categoryController =
         TextEditingController(text: widget.category['display_name'] ?? _tableName);
   }
@@ -521,15 +475,8 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
   @override
   void dispose() {
     _categoryController.dispose();
-    for (final c in _fieldControllers.values) {
-      c.dispose();
-    }
     super.dispose();
   }
-
-  String get _tableName => widget.category['table_name'] as String;
-  String get _displayName =>
-      widget.category['display_name'] as String? ?? _tableName;
 
   Future<void> _saveCategoryRename() async {
     final newName = _categoryController.text.trim();
@@ -552,37 +499,30 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
     }
   }
 
-  Future<void> _saveFieldRename(String fieldName) async {
-    final controller = _fieldControllers[fieldName];
-    if (controller == null) return;
-    final newName = controller.text.trim();
+  Future<void> _doFieldRename(
+      String fieldName, String newDisplayName, String? newType) async {
     final idx = _fields.indexWhere((f) => f['field_name'] == fieldName);
-    final currentDisplay =
-        idx >= 0 ? (_fields[idx]['display_name'] as String? ?? fieldName) : fieldName;
+    final current = idx >= 0
+        ? (_fields[idx]['display_name'] as String? ?? fieldName)
+        : fieldName;
 
-    final newType = _editingFieldTypes.remove(fieldName);
-    setState(() => _editingField = null);
-    if (newName.isEmpty || newName == currentDisplay) {
-      if (newType == null) return;
-    }
+    if ((newDisplayName.isEmpty || newDisplayName == current) &&
+        newType == null) { return; }
 
     setState(() => _busyField = fieldName);
-    final resolvedName = newName.isEmpty ? currentDisplay : newName;
+    final resolved = newDisplayName.isEmpty ? current : newDisplayName;
     try {
       if (newType != null) {
-        // Type change requires DDL — must go through the Edge Function
-        await ApiService().updateField(_tableName, fieldName, resolvedName,
+        await _apiService.updateField(_tableName, fieldName, resolved,
             newFieldType: newType);
       } else {
-        // Display-name-only change can go direct to Supabase
-        await _supabaseService.renameFieldDisplay(
-            _tableName, fieldName, resolvedName);
+        await _supabaseService.renameFieldDisplay(_tableName, fieldName, resolved);
       }
       widget.onChanged();
       if (mounted && idx >= 0) {
         setState(() => _fields[idx] = {
           ..._fields[idx],
-          'display_name': resolvedName,
+          'display_name': resolved,
           if (newType != null) 'field_type': newType,
         });
       }
@@ -590,24 +530,74 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Error: $e')));
-        controller.text = currentDisplay;
       }
     } finally {
       if (mounted) setState(() => _busyField = null);
     }
   }
 
-  Future<void> _setTitleField(String fieldName) async {
-    try {
-      await _supabaseService.setUiSetting('${_tableName}_title_field', fieldName);
-      if (mounted) setState(() => _titleField = fieldName);
-      widget.onChanged();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error setting title field: $e')));
-      }
-    }
+  Future<void> _showRenameDialog(Map<String, dynamic> field,
+      {bool isAnchor = false}) async {
+    final fn = field['field_name'] as String;
+    final dn = field['display_name'] as String? ?? fn;
+    final ft = field['field_type'] as String? ?? 'text';
+    final nameCtrl = TextEditingController(text: dn);
+    String selectedType = ft;
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          title: const Text('Edit Field'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Label',
+                  border: OutlineInputBorder(),
+                ),
+                textInputAction: TextInputAction.done,
+              ),
+              if (!isAnchor) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedType,
+                  decoration: const InputDecoration(
+                    labelText: 'Type',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'text', child: Text('Text')),
+                    DropdownMenuItem(value: 'number', child: Text('Number')),
+                    DropdownMenuItem(value: 'date', child: Text('Date')),
+                    DropdownMenuItem(
+                        value: 'textarea', child: Text('Long Text')),
+                  ],
+                  onChanged: (val) => setDlg(() => selectedType = val!),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                  ctx, {'name': nameCtrl.text.trim(), 'type': selectedType}),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameCtrl.dispose();
+    if (result == null) return;
+    await _doFieldRename(
+        fn, result['name']!, isAnchor ? null : result['type']);
   }
 
   Future<void> _deleteField(Map<String, dynamic> field) async {
@@ -640,8 +630,8 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
       await _apiService.removeField(_tableName, fieldName);
       widget.onChanged();
       if (mounted) {
-        setState(
-            () => _fields.removeWhere((f) => f['field_name'] == fieldName));
+        setState(() =>
+            _fields.removeWhere((f) => f['field_name'] == fieldName));
       }
     } catch (e) {
       if (mounted) {
@@ -660,7 +650,7 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
     final result = await showDialog<Map<String, String>>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
+        builder: (ctx, setDlg) => AlertDialog(
           title: const Text('Add Field'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -676,7 +666,7 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: selectedType,
+                initialValue: selectedType,
                 decoration: const InputDecoration(
                   labelText: 'Type',
                   border: OutlineInputBorder(),
@@ -685,9 +675,10 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
                   DropdownMenuItem(value: 'text', child: Text('Text')),
                   DropdownMenuItem(value: 'number', child: Text('Number')),
                   DropdownMenuItem(value: 'date', child: Text('Date')),
-                  DropdownMenuItem(value: 'textarea', child: Text('Long Text')),
+                  DropdownMenuItem(
+                      value: 'textarea', child: Text('Long Text')),
                 ],
-                onChanged: (val) => setDialogState(() => selectedType = val!),
+                onChanged: (val) => setDlg(() => selectedType = val!),
               ),
             ],
           ),
@@ -742,235 +733,284 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  Widget _buildSectionLabel(BuildContext context, String text) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Category name — inline editable
-          Row(
-            children: [
-              Expanded(
-                child: _editingCategory
-                    ? TextField(
-                        controller: _categoryController,
-                        autofocus: true,
-                        style: theme.textTheme.titleLarge,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          border: UnderlineInputBorder(),
-                        ),
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => _saveCategoryRename(),
-                      )
-                    : GestureDetector(
-                        onTap: () => setState(() => _editingCategory = true),
-                        child: Text(
-                          _categoryController.text.isNotEmpty
-                              ? _categoryController.text
-                              : _displayName,
-                          style: theme.textTheme.titleLarge,
-                        ),
-                      ),
-              ),
-              if (_busyCategory)
-                const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-              else if (_editingCategory) ...[
-                IconButton(
-                  icon: const Icon(Icons.check, size: 20),
-                  tooltip: 'Save',
-                  onPressed: _saveCategoryRename,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 20),
-                  tooltip: 'Cancel',
-                  onPressed: () {
-                    _categoryController.text = _displayName;
-                    setState(() => _editingCategory = false);
-                  },
-                ),
-              ] else
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  tooltip: 'Rename',
-                  onPressed: () => setState(() => _editingCategory = true),
-                ),
-            ],
-          ),
-          const Divider(height: 20),
-          if (_fields.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text('No fields yet.'),
-            )
-          else
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 320),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _fields.length,
-                itemBuilder: (context, index) {
-                  final field = _fields[index];
-                  final fn = field['field_name'] as String;
-                  final dn = field['display_name'] as String? ?? fn;
-                  final ft = field['field_type'] as String? ?? 'text';
-                  final isBusy = _busyField == fn;
-                  final isEditing = _editingField == fn;
-
-                  // Lazily create controller for inline edit
-                  if (isEditing && !_fieldControllers.containsKey(fn)) {
-                    _fieldControllers[fn] = TextEditingController(text: dn);
-                  }
-
-                  final isPrimary = _titleField == fn;
-                  final currentEditType = _editingFieldTypes[fn] ?? ft;
-
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            // Star = primary display field
-                            IconButton(
-                              icon: Icon(
-                                isPrimary ? Icons.star : Icons.star_outline,
-                                size: 18,
-                                color: isPrimary
-                                    ? theme.colorScheme.primary
-                                    : theme.colorScheme.outline,
-                              ),
-                              tooltip: isPrimary
-                                  ? 'Primary display field'
-                                  : 'Set as primary display field',
-                              onPressed: isBusy ? null : () => _setTitleField(fn),
-                            ),
-                            Expanded(
-                              child: isEditing
-                                  ? TextField(
-                                      controller: _fieldControllers[fn],
-                                      autofocus: true,
-                                      decoration: const InputDecoration(
-                                        isDense: true,
-                                        border: UnderlineInputBorder(),
-                                      ),
-                                      textInputAction: TextInputAction.done,
-                                      onSubmitted: (_) => _saveFieldRename(fn),
-                                    )
-                                  : GestureDetector(
-                                      onTap: () {
-                                        _fieldControllers[fn] =
-                                            TextEditingController(text: dn);
-                                        _editingFieldTypes[fn] = ft;
-                                        setState(() => _editingField = fn);
-                                      },
-                                      child: Text(dn),
-                                    ),
-                            ),
-                            if (isBusy)
-                              const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2))
-                            else if (isEditing) ...[
-                              IconButton(
-                                icon: const Icon(Icons.check, size: 18),
-                                tooltip: 'Save',
-                                onPressed: () => _saveFieldRename(fn),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.close, size: 18),
-                                tooltip: 'Cancel',
-                                onPressed: () {
-                                  _editingFieldTypes.remove(fn);
-                                  setState(() => _editingField = null);
-                                },
-                              ),
-                            ] else ...[
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined, size: 18),
-                                tooltip: 'Edit',
-                                onPressed: () {
-                                  _fieldControllers[fn] =
-                                      TextEditingController(text: dn);
-                                  _editingFieldTypes[fn] = ft;
-                                  setState(() => _editingField = fn);
-                                },
-                              ),
-                              IconButton(
-                                icon: Icon(Icons.delete_outline,
-                                    size: 18,
-                                    color: theme.colorScheme.error),
-                                tooltip: 'Remove',
-                                onPressed: () => _deleteField(field),
-                              ),
-                            ],
-                          ],
-                        ),
-                        // Type selector shown only during editing
-                        if (isEditing)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 40, bottom: 4),
-                            child: DropdownButton<String>(
-                              value: currentEditType,
-                              isDense: true,
-                              underline: const SizedBox(),
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: theme.colorScheme.outline),
-                              items: const [
-                                DropdownMenuItem(value: 'text', child: Text('Text')),
-                                DropdownMenuItem(value: 'number', child: Text('Number')),
-                                DropdownMenuItem(value: 'date', child: Text('Date')),
-                                DropdownMenuItem(value: 'textarea', child: Text('Long Text')),
-                              ],
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() => _editingFieldTypes[fn] = val);
-                                }
-                              },
-                            ),
-                          )
-                        else
-                          Padding(
-                            padding: const EdgeInsets.only(left: 40, bottom: 4),
-                            child: Text(ft,
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: theme.colorScheme.outline)),
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: _busyField == '__adding__' ? null : _addField,
-            icon: _busyField == '__adding__'
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.add),
-            label: const Text('Add Field'),
-          ),
-        ],
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
+          color: Theme.of(context).colorScheme.primary,
+        ),
       ),
     );
   }
+
+  Widget _buildRequiredFieldTile(
+      BuildContext context, Map<String, dynamic> field, bool showDivider) {
+    final theme = Theme.of(context);
+    final fn = field['field_name'] as String;
+    final dn = field['display_name'] as String? ?? fn;
+    final ft = field['field_type'] as String? ?? 'text';
+    final isBusy = _busyField == fn;
+
+    return Column(
+      children: [
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(dn, style: const TextStyle(fontWeight: FontWeight.w500)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Required',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          subtitle: Text(
+            ft,
+            style: TextStyle(fontSize: 12, color: theme.colorScheme.outline),
+          ),
+          trailing: isBusy
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : IconButton(
+                  icon: Icon(Icons.edit_outlined,
+                      size: 18, color: theme.colorScheme.outline),
+                  tooltip: 'Rename',
+                  onPressed: () => _showRenameDialog(field, isAnchor: true),
+                ),
+        ),
+        if (showDivider)
+          Divider(
+              height: 1,
+              indent: 16,
+              endIndent: 16,
+              color: theme.colorScheme.outline.withValues(alpha: 0.15)),
+      ],
+    );
+  }
+
+  Widget _buildCustomFieldTile(
+      BuildContext context, Map<String, dynamic> field, bool showDivider) {
+    final theme = Theme.of(context);
+    final fn = field['field_name'] as String;
+    final dn = field['display_name'] as String? ?? fn;
+    final ft = field['field_type'] as String? ?? 'text';
+    final isBusy = _busyField == fn;
+
+    return Column(
+      children: [
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          title: Text(dn, style: const TextStyle(fontWeight: FontWeight.w500)),
+          subtitle: Text(
+            ft,
+            style: TextStyle(fontSize: 12, color: theme.colorScheme.outline),
+          ),
+          trailing: isBusy
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.edit_outlined,
+                          size: 18, color: theme.colorScheme.outline),
+                      tooltip: 'Edit',
+                      onPressed: () => _showRenameDialog(field),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.delete_outline,
+                          size: 18, color: theme.colorScheme.error),
+                      tooltip: 'Remove',
+                      onPressed: () => _deleteField(field),
+                    ),
+                  ],
+                ),
+        ),
+        if (showDivider)
+          Divider(
+              height: 1,
+              indent: 16,
+              endIndent: 16,
+              color: theme.colorScheme.outline.withValues(alpha: 0.15)),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final anchorFields = _fields.take(2).toList();
+    final customFields = _fields.skip(2).toList();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Drag handle
+        Center(
+          child: Container(
+            margin: const EdgeInsets.only(top: 10, bottom: 4),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.outline.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+        Flexible(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+                16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── Category name ──
+                Row(
+                  children: [
+                    Expanded(
+                      child: _editingCategory
+                          ? TextField(
+                              controller: _categoryController,
+                              autofocus: true,
+                              style: theme.textTheme.titleLarge,
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                border: UnderlineInputBorder(),
+                              ),
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => _saveCategoryRename(),
+                            )
+                          : GestureDetector(
+                              onTap: () =>
+                                  setState(() => _editingCategory = true),
+                              child: Text(
+                                _categoryController.text.isNotEmpty
+                                    ? _categoryController.text
+                                    : _displayName,
+                                style: theme.textTheme.titleLarge,
+                              ),
+                            ),
+                    ),
+                    if (_busyCategory)
+                      const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                    else if (_editingCategory) ...[
+                      IconButton(
+                        icon: const Icon(Icons.check, size: 20),
+                        onPressed: _saveCategoryRename,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () {
+                          _categoryController.text = _displayName;
+                          setState(() => _editingCategory = false);
+                        },
+                      ),
+                    ] else
+                      IconButton(
+                        icon: Icon(Icons.edit_outlined,
+                            size: 18, color: theme.colorScheme.outline),
+                        tooltip: 'Rename category',
+                        onPressed: () =>
+                            setState(() => _editingCategory = true),
+                      ),
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+
+                // ── Required Fields ──
+                if (anchorFields.isNotEmpty) ...[
+                  _buildSectionLabel(context, 'Required Fields'),
+                  Card(
+                    margin: EdgeInsets.zero,
+                    child: Column(
+                      children: anchorFields
+                          .asMap()
+                          .entries
+                          .map((e) => _buildRequiredFieldTile(
+                              context,
+                              e.value,
+                              e.key < anchorFields.length - 1))
+                          .toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+
+                // ── Custom Fields ──
+                _buildSectionLabel(context, 'Custom Fields'),
+                if (customFields.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'No custom fields yet.',
+                      style: TextStyle(color: theme.colorScheme.outline),
+                    ),
+                  )
+                else
+                  Card(
+                    margin: EdgeInsets.zero,
+                    child: Column(
+                      children: customFields
+                          .asMap()
+                          .entries
+                          .map((e) => _buildCustomFieldTile(
+                              context,
+                              e.value,
+                              e.key < customFields.length - 1))
+                          .toList(),
+                    ),
+                  ),
+
+                const SizedBox(height: 12),
+
+                OutlinedButton.icon(
+                  onPressed: _busyField == '__adding__' ? null : _addField,
+                  icon: _busyField == '__adding__'
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.add),
+                  label: const Text('Add Field'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
+
+// ─────────────────────────────────────────────────────────────
+//  Item Form  (add / edit item)
+// ─────────────────────────────────────────────────────────────
 
 class _ItemForm extends StatefulWidget {
   final List<Map<String, dynamic>> fields;
@@ -1046,12 +1086,16 @@ class _ItemFormState extends State<_ItemForm> {
             ],
           ),
           const SizedBox(height: 16),
-          ...widget.fields.map((f) {
+          ...widget.fields.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final f = entry.value;
             final fieldName = f['field_name'] as String;
             final displayName = f['display_name'] as String? ?? fieldName;
             final fieldType = f['field_type'] as String? ?? 'text';
-            final isNumber =
-                fieldType == 'number' || fieldType == 'integer' || fieldType == 'float';
+            final isAnchor = idx < 2;
+            final isNumber = fieldType == 'number' ||
+                fieldType == 'integer' ||
+                fieldType == 'float';
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: TextField(
@@ -1061,7 +1105,7 @@ class _ItemFormState extends State<_ItemForm> {
                     : TextInputType.text,
                 maxLines: fieldType == 'textarea' ? 3 : 1,
                 decoration: InputDecoration(
-                  labelText: displayName,
+                  labelText: isAnchor ? '$displayName *' : displayName,
                   border: const OutlineInputBorder(),
                 ),
               ),
