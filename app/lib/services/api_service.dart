@@ -64,8 +64,18 @@ class ApiService {
       }),
     );
 
+    if (response.statusCode == 401) {
+      // Session expired — force re-login
+      await _supabase.auth.signOut();
+      throw SessionExpiredException();
+    }
     if (response.statusCode != 200) {
-      throw Exception('API error: ${response.statusCode}');
+      String detail = 'API error ${response.statusCode}';
+      try {
+        final body = jsonDecode(response.body);
+        if (body['error'] != null) detail = body['error'] as String;
+      } catch (_) {}
+      throw Exception(detail);
     }
 
     final data = jsonDecode(response.body);

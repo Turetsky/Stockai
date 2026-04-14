@@ -30,6 +30,9 @@ app/windows/
 app/macos/
 app/web/
 
+# Supabase config (generated at build time from env vars — do not commit)
+web/config.js
+
 # General
 .DS_Store
 Thumbs.db

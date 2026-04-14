@@ -16,6 +16,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _nameController = TextEditingController();
   bool _isLogin = true;
   bool _loading = false;
+  bool _confirmationSent = false;
+  String? _pendingEmail;
   String? _error;
 
   Future<void> _handleAuth() async {
@@ -27,18 +29,30 @@ class _LoginScreenState extends State<LoginScreen> {
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const ChatScreen()),
+          );
+        }
       } else {
-        await supabase.auth.signUp(
+        final response = await supabase.auth.signUp(
           email: _emailController.text.trim(),
           password: _passwordController.text,
           data: {'display_name': _nameController.text.trim()},
         );
-      }
-
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const ChatScreen()),
-        );
+        if (!mounted) return;
+        if (response.session != null) {
+          // Auto-confirmed (email confirmation disabled in Supabase)
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const ChatScreen()),
+          );
+        } else {
+          // Email confirmation required
+          setState(() {
+            _confirmationSent = true;
+            _pendingEmail = _emailController.text.trim();
+          });
+        }
       }
     } on AuthException catch (e) {
       setState(() { _error = e.message; });
@@ -60,6 +74,51 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    if (_confirmationSent) {
+      return Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+            ),
+          ),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Card(
+                elevation: 8,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.mark_email_read_outlined, size: 56, color: Color(0xFF667eea)),
+                      const SizedBox(height: 16),
+                      Text('Check your email', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      Text(
+                        'We sent a confirmation link to\n${_pendingEmail ?? ''}.\nClick it to activate your account.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                      ),
+                      const SizedBox(height: 24),
+                      TextButton(
+                        onPressed: () => setState(() { _confirmationSent = false; _isLogin = true; }),
+                        child: const Text('Back to Sign In'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       body: Container(

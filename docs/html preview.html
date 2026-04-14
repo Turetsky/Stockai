@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { 
+    background-color: #fce4ec; /* Matching your Rose Pink theme */
+    font-family: 'Segoe UI', sans-serif;
+    display: flex;
+    padding: 20px;
+  }
+
+  .inventory-card {
+    background: white;
+    width: 320px;
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Anchor Duo: Identity (The Name) */
+  .item-name {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1A1A1A;
+    margin: 0;
+  }
+
+  /* Secondary Metadata (Like 'red') */
+  .item-desc {
+    font-size: 14px;
+    color: #757575;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: -8px;
+  }
+
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid #f0f0f0;
+  }
+
+  /* Anchor Duo: Quantity */
+  .quantity-badge {
+    background: #fce4ec;
+    color: #d81b60;
+    padding: 6px 12px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 14px;
+  }
+
+  .field-label {
+    font-size: 11px;
+    color: #9e9e9e;
+    display: block;
+    margin-bottom: 2px;
+  }
+</style>
+</head>
+<body>
+
+  <div class="inventory-card">
+    <div>
+      <span class="field-label">NAME</span>
+      <h2 class="item-name">Pens</h2>
+      <div class="item-desc">Red</div>
+    </div>
+    
+    <div class="card-footer">
+      <div>
+        <span class="field-label">TOTAL STOCK</span>
+        <div class="quantity-badge">2 Units</div>
+      </div>
+      
+      <div style="text-align: right;">
+        <span class="field-label">LOC</span>
+        <div style="font-size: 14px; font-weight: 500;">Aisle 4</div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

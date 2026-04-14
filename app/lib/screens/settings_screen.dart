@@ -1033,7 +1033,9 @@ class _DataTabState extends State<_DataTab> {
   }
 
   void _reload() {
-    setState(() => _categoriesFuture = _supabaseService.getCategories());
+    setState(() {
+      _categoriesFuture = _supabaseService.getCategories();
+    });
   }
 
   List<Map<String, dynamic>> _userFields(List<Map<String, dynamic>> fields) {

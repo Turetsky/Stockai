@@ -60,8 +60,8 @@
     return;
   }
 
-  const SUPABASE_URL = 'https://masngvxdbxqrrreszjxv.supabase.co';
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hc25ndnhkYnhxcnJyZXN6anh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3Njc5MzIsImV4cCI6MjA4NjM0MzkzMn0.QmHFsyeMUkwE7cW6N88k2eSk2BpyXit2UxVlqXxl4zE';
+  const SUPABASE_URL = window.SUPABASE_URL || 'https://masngvxdbxqrrreszjxv.supabase.co';
+  const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hc25ndnhkYnhxcnJyZXN6anh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3Njc5MzIsImV4cCI6MjA4NjM0MzkzMn0.QmHFsyeMUkwE7cW6N88k2eSk2BpyXit2UxVlqXxl4zE';
 
   if (!window.db) {
     window.db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -198,10 +198,25 @@
       flex-shrink: 0;
     }
 
+    .sidebar-title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
     .sidebar-title {
       font-size: 1.07rem;
       font-weight: 600;
       color: var(--clr-sidebar-title);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sidebar-slogan {
+      font-size: 0.7rem;
+      color: rgba(255, 255, 255, 0.45);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -630,9 +645,14 @@
     const titleText = window.appName || 'StockAI';
     const logoEmoji = window.appLogo || '';
     const defaultLogoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" style="width:28px;height:28px;flex-shrink:0"><polygon points="50,10 90,30 90,70 50,90 10,70 10,30"/><polyline points="10,30 50,50 90,30"/><line x1="50" y1="50" x2="50" y2="90"/></svg>`;
+    const titleGroupHtml = `
+      <div class="sidebar-title-group">
+        <div class="sidebar-title">${titleText}</div>
+        <div class="sidebar-slogan">The database that builds itself.</div>
+      </div>`;
     header.innerHTML = logoEmoji
-      ? `<div class="sidebar-logo">${logoEmoji}</div><div class="sidebar-title">${titleText}</div>`
-      : `<div class="sidebar-logo">${defaultLogoSvg}</div><div class="sidebar-title">${titleText}</div>`;
+      ? `<div class="sidebar-logo">${logoEmoji}</div>${titleGroupHtml}`
+      : `<div class="sidebar-logo">${defaultLogoSvg}</div>${titleGroupHtml}`;
     sidebar.appendChild(header);
 
     // Navigation
@@ -995,16 +1015,21 @@
     if (status) status.textContent = 'Sending…';
 
     try {
-      const session = window.currentSession;
-      if (!session) throw new Error('Not authenticated');
+      // Always get a fresh token before calling the edge function
+      let accessToken = window.currentSession?.access_token;
+      try {
+        const { data } = await window.db.auth.refreshSession();
+        if (data?.session?.access_token) accessToken = data.session.access_token;
+      } catch (_) {}
+      if (!accessToken) throw new Error('Not authenticated');
 
       const response = await fetch(
-        'https://masngvxdbxqrrreszjxv.supabase.co/functions/v1/smart-api',
+        (window.SUPABASE_URL || 'https://masngvxdbxqrrreszjxv.supabase.co') + '/functions/v1/smart-api',
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
+            'Authorization': `Bearer ${accessToken}`,
           },
           body: JSON.stringify({
             tool_call: {

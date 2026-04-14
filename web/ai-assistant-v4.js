@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const AI_ENDPOINT = 'https://masngvxdbxqrrreszjxv.supabase.co/functions/v1/smart-api';
+  const AI_ENDPOINT = (window.SUPABASE_URL || 'https://masngvxdbxqrrreszjxv.supabase.co') + '/functions/v1/smart-api';
 
   const AI_PANEL_SIZES = {
     small:  { width: '300px', height: '420px' },
@@ -179,7 +179,16 @@ What would you like to do?</div>
     const container = document.getElementById('ai-chat-messages');
     const el        = document.createElement('div');
     el.className    = role === 'user' ? 'user-msg' : 'ai-msg';
-    el.textContent  = text;
+    if (role === 'user') {
+      el.textContent = text;
+    } else {
+      // Strip markdown bold/italic markers so raw ** don't appear
+      const clean = text
+        .replace(/\*\*(.+?)\*\*/g, '$1')  // **bold** → bold
+        .replace(/\*(.+?)\*/g, '$1')       // *italic* → italic
+        .replace(/`(.+?)`/g, '$1');        // `code` → code
+      el.textContent = clean;
+    }
     container.appendChild(el);
     container.scrollTop = container.scrollHeight;
   }
@@ -312,12 +321,12 @@ What would you like to do?</div>
         position: fixed;
         bottom: 24px;
         right: 24px;
-        width: 58px;
-        height: 58px;
+        width: 48px;
+        height: 48px;
         background: linear-gradient(135deg, var(--clr-start, #667eea), var(--clr-end, #764ba2));
         border: none;
         border-radius: 50%;
-        font-size: 24px;
+        font-size: 20px;
         color: white;
         cursor: pointer;
         box-shadow: 0 4px 18px color-mix(in srgb, var(--clr-accent, #667eea) 55%, transparent);
@@ -489,8 +498,11 @@ What would you like to do?</div>
 
       @media (max-width: 639px) {
         #ai-chat-btn {
-          bottom: 16px;
-          right: 16px;
+          bottom: 72px;
+          right: 14px;
+          width: 44px;
+          height: 44px;
+          font-size: 18px;
         }
         #ai-chat-panel {
           top: 0 !important;
@@ -501,6 +513,9 @@ What would you like to do?</div>
           height: 100% !important;
           border-radius: 0;
           max-width: none;
+        }
+        #ai-chat-header {
+          padding-top: max(16px, env(safe-area-inset-top, 16px));
         }
         .close-x       { display: none; }
         .close-chevron { display: inline; }

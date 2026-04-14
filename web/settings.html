@@ -7,6 +7,7 @@
     <script>
     (function(){try{var t=JSON.parse(localStorage.getItem('inv_theme')||'{}'),r=document.documentElement,m={primary_color_start:'--clr-start',primary_color_end:'--clr-end',header_text_color:'--clr-header-text',accent_color:'--clr-accent',bg_color:'--clr-bg',card_color:'--clr-card',card_radius:'--card-radius',text_primary_color:'--clr-text-primary',text_secondary_color:'--clr-text-secondary',item_card_bg:'--clr-item-card',stats_bar_bg:'--clr-stats-bar',low_stock_color:'--clr-low-stock',btn_add_bg:'--clr-btn-add',btn_edit_bg:'--clr-btn-edit',btn_del_bg:'--clr-btn-del',sidebar_bg:'--clr-sidebar-bg',sidebar_header:'--clr-sidebar-header',sidebar_text:'--clr-sidebar-text',sidebar_title:'--clr-sidebar-title'};for(var k in m)if(t[k])r.style.setProperty(m[k],t[k])}catch(e){}})();
     </script>
+    <script src="/config.js"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
     <style>
         :root {
@@ -248,13 +249,11 @@
         /* Import section */
         .import-row {
             display: flex;
+            flex-direction: column;
             gap: 10px;
-            align-items: center;
-            flex-wrap: wrap;
         }
         .import-row select {
-            flex: 1;
-            min-width: 140px;
+            width: 100%;
             padding: 9px 12px;
             border: 2px solid #e0e0e0;
             border-radius: 8px;
@@ -266,8 +265,7 @@
         }
         .import-row select:focus { outline: none; border-color: var(--clr-accent); }
         .import-row input[type="file"] {
-            flex: 1;
-            min-width: 0;
+            width: 100%;
             font-size: 13px;
             color: var(--clr-text-secondary);
         }
@@ -368,7 +366,7 @@
 
     <script src="sidebar.js"></script>
     <script>
-        const SUPABASE_URL = 'https://masngvxdbxqrrreszjxv.supabase.co';
+        const SUPABASE_URL = window.SUPABASE_URL || 'https://masngvxdbxqrrreszjxv.supabase.co';
 
         // ── Tab switching ──
         document.querySelectorAll('.tab-btn').forEach(btn => {

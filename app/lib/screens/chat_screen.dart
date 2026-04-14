@@ -18,6 +18,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
+  final _inputFocusNode = FocusNode();
   final _apiService = ApiService();
   final _supabaseService = SupabaseService();
   final List<ChatMessage> _messages = [];
@@ -52,6 +53,10 @@ class _ChatScreenState extends State<ChatScreen> {
     _loadCategories();
     _uiSettingsFuture = _supabaseService.getUiSettings();
     loadThemeFromSupabase();
+    // Auto-focus the chat input when the screen opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _inputFocusNode.requestFocus();
+    });
   }
 
   Future<void> _initSpeech() async {
@@ -299,24 +304,27 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    if (appLogo.isNotEmpty) ...[
-                      Text(appLogo, style: const TextStyle(fontSize: 28)),
-                      const SizedBox(width: 10),
-                    ],
+                    SizedBox(
+                      width: 42,
+                      height: 42,
+                      child: CustomPaint(
+                        painter: _StockAICubeLogoPainter(),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            appName.isNotEmpty ? appName : 'StockAI',
-                            style: const TextStyle(
+                          const Text(
+                            'StockAI',
+                            style: TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w700,
-                              fontSize: 17,
+                              fontSize: 20,
+                              letterSpacing: 0.2,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 2),
                           Text(
@@ -361,12 +369,17 @@ class _ChatScreenState extends State<ChatScreen> {
                         final iconRunes = icon.runes.toList();
                         final isEmoji =
                             iconRunes.isNotEmpty && iconRunes.first > 0x2000;
+                        // Strip leading emoji + whitespace from display_name (emoji shown in leading)
+                        final displayName = isEmoji
+                            ? name.replaceFirst(
+                                RegExp(r'^\p{Emoji_Presentation}\s*', unicode: true), '')
+                            : name;
                         return ListTile(
                           leading: isEmoji
                               ? Text(icon,
                                   style: const TextStyle(fontSize: 22))
                               : const Icon(Icons.inventory_2_outlined),
-                          title: Text(name),
+                          title: Text(displayName),
                           onTap: () {
                             Navigator.pop(context);
                             Navigator.push(
@@ -411,6 +424,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _inputFocusNode.dispose();
     _speech.stop();
     _player.dispose();
     super.dispose();
@@ -548,6 +562,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _messageController,
+                      focusNode: _inputFocusNode,
                       decoration: InputDecoration(
                         hintText: _isListening
                             ? 'Listening...'
@@ -634,6 +649,49 @@ class ChatMessage {
   final bool isUser;
   final bool isError;
   ChatMessage({required this.text, required this.isUser, this.isError = false});
+}
+
+/// Draws the StockAI cube logo — matches the SVG in landing.html:
+///   hexagon outline + top-face cross-line + vertical center line.
+class _StockAICubeLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.07
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    // SVG viewBox 0 0 100 100 → scale to widget size
+    final scaleX = size.width / 100;
+    final scaleY = size.height / 100;
+    Offset p(double x, double y) => Offset(x * scaleX, y * scaleY);
+
+    // Hexagon: polygon points="50,10 90,30 90,70 50,90 10,70 10,30"
+    final hex = Path()
+      ..moveTo(p(50, 10).dx, p(50, 10).dy)
+      ..lineTo(p(90, 30).dx, p(90, 30).dy)
+      ..lineTo(p(90, 70).dx, p(90, 70).dy)
+      ..lineTo(p(50, 90).dx, p(50, 90).dy)
+      ..lineTo(p(10, 70).dx, p(10, 70).dy)
+      ..lineTo(p(10, 30).dx, p(10, 30).dy)
+      ..close();
+    canvas.drawPath(hex, paint);
+
+    // Top-face cross: polyline points="10,30 50,50 90,30"
+    final cross = Path()
+      ..moveTo(p(10, 30).dx, p(10, 30).dy)
+      ..lineTo(p(50, 50).dx, p(50, 50).dy)
+      ..lineTo(p(90, 30).dx, p(90, 30).dy);
+    canvas.drawPath(cross, paint);
+
+    // Center vertical: line x1="50" y1="50" x2="50" y2="90"
+    canvas.drawLine(p(50, 50), p(50, 90), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // ---------- Manage Categories Bottom Sheet ----------
@@ -782,12 +840,17 @@ class _ManageCategoriesSheetState extends State<_ManageCategoriesSheet> {
                   final iconRunes = icon.runes.toList();
                   final isEmoji =
                       iconRunes.isNotEmpty && iconRunes.first > 0x2000;
+                  // Strip leading emoji + whitespace from display_name (emoji shown in leading)
+                  final displayName = isEmoji
+                      ? name.replaceFirst(
+                          RegExp(r'^\p{Emoji_Presentation}\s*', unicode: true), '')
+                      : name;
                   final isDeleting = _deletingTable == tableName;
                   final isRenaming = _renamingTable == tableName;
                   if (isRenaming &&
                       !_renameControllers.containsKey(tableName)) {
                     _renameControllers[tableName] =
-                        TextEditingController(text: name);
+                        TextEditingController(text: displayName);
                   }
                   return ListTile(
                     leading: isEmoji
@@ -808,10 +871,10 @@ class _ManageCategoriesSheetState extends State<_ManageCategoriesSheet> {
                         : GestureDetector(
                             onTap: () {
                               _renameControllers[tableName] =
-                                  TextEditingController(text: name);
+                                  TextEditingController(text: displayName);
                               setState(() => _renamingTable = tableName);
                             },
-                            child: Text(name),
+                            child: Text(displayName),
                           ),
                     trailing: isDeleting
                         ? const SizedBox(

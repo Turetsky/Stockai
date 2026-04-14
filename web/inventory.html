@@ -7,6 +7,7 @@
     <script>
     (function(){try{var t=JSON.parse(localStorage.getItem('inv_theme')||'{}'),r=document.documentElement,m={primary_color_start:'--clr-start',primary_color_end:'--clr-end',header_text_color:'--clr-header-text',accent_color:'--clr-accent',bg_color:'--clr-bg',card_color:'--clr-card',card_radius:'--card-radius',font_size_base:'--font-base',text_primary_color:'--clr-text-primary',text_secondary_color:'--clr-text-secondary',item_card_bg:'--clr-item-card',stats_bar_bg:'--clr-stats-bar',low_stock_color:'--clr-low-stock',btn_add_bg:'--clr-btn-add',btn_edit_bg:'--clr-btn-edit',btn_del_bg:'--clr-btn-del',sidebar_bg:'--clr-sidebar-bg',sidebar_header:'--clr-sidebar-header',sidebar_text:'--clr-sidebar-text',sidebar_title:'--clr-sidebar-title'};for(var k in m)if(t[k])r.style.setProperty(m[k],t[k])}catch(e){}})();
     </script>
+    <script src="/config.js"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -313,7 +314,7 @@
     <script src="sidebar.js"></script>
     <script type="text/babel">
         const { useState, useEffect, useCallback } = React;
-        const SUPABASE_URL = 'https://masngvxdbxqrrreszjxv.supabase.co';
+        const SUPABASE_URL = window.SUPABASE_URL || 'https://masngvxdbxqrrreszjxv.supabase.co';
 
         function InventoryApp() {
             const [tableName,      setTableName]      = useState('');

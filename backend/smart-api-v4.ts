@@ -65,7 +65,12 @@ const tools = [
     name: 'create_category',
     description:
       'Create a new inventory category with custom fields. ' +
-      'Always include a "quantity" number field.',
+      'FIELD ORDER IS CRITICAL — always structure the fields array exactly like this:\n' +
+      '  fields[0]: the item identity/name field (field_type: "text", required: true) — this is shown as the card title.\n' +
+      '  fields[1]: the quantity field (field_type: "number") — this is shown as the stock count badge.\n' +
+      '  fields[2+]: any additional custom fields (color, location, notes, price, etc.).\n' +
+      'NEVER put a price, cost, type, unit, or any non-name field at position 0. ' +
+      'The first field must always be the human-readable item name.',
     input_schema: {
       type: 'object',
       properties: {
@@ -156,13 +161,13 @@ const tools = [
   },
   {
     name: 'upsert_item',
-    description: 'Add a new item or update an existing one.',
+    description: 'Add a new item or update an existing one. IMPORTANT: You MUST call get_fields first to get the exact field_name and field_type for this table. The data keys must exactly match field_name values from get_fields. Number fields must have numeric values. Text fields must have string values. Do NOT guess field names.',
     input_schema: {
       type: 'object',
       properties: {
         table_name: { type: 'string' },
         id:         { type: 'string', description: 'UUID of item to update. Omit to create new.' },
-        data:       { type: 'object', description: 'field_name → value pairs' },
+        data:       { type: 'object', description: 'field_name → value pairs. Keys must exactly match field_name from get_fields. Values must match the field_type (number fields need numeric values, text fields need strings).' },
       },
       required: ['table_name', 'data'],
     },
@@ -413,7 +418,7 @@ async function runTool(
           display_name: f.display_name,
           field_type:   f.field_type,
           required:     f.required  ?? false,
-          sort_order:   f.sort_order ?? i + 1,
+          sort_order:   f.sort_order ?? i,
           user_id:      userId,   // scoped per user — two users can share same field names
         }));
         const { error: fdErr } = await adminDb.from('field_definitions').insert(fieldRows);
@@ -606,20 +611,24 @@ async function runTool(
           .single();
 
         if (itemRow) {
-          // Soft-delete: move to recycling bin
-          await userDb.from('recycling_bin').insert({
-            user_id:      userId,
-            source_table: tn,
-            item_id:      input.id as string,
-            item_data:    itemRow,
-          });
+          // Soft-delete: move to recycling bin (non-blocking — failure must not prevent hard delete)
+          try {
+            await userDb.from('recycling_bin').insert({
+              user_id:      userId,
+              source_table: tn,
+              item_id:      input.id as string,
+              item_data:    itemRow,
+            });
 
-          // Auto-cleanup: purge this user's recycled items older than 30 days
-          await userDb
-            .from('recycling_bin')
-            .delete()
-            .eq('user_id', userId)
-            .lt('deleted_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+            // Auto-cleanup: purge this user's recycled items older than 30 days
+            await userDb
+              .from('recycling_bin')
+              .delete()
+              .eq('user_id', userId)
+              .lt('deleted_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+          } catch (_) {
+            // Recycling bin is best-effort; do not block the actual delete
+          }
         }
 
         // Hard-delete from source table (RLS scoped to auth.uid())
@@ -819,9 +828,10 @@ Deno.serve(async (req) => {
     );
 
     /* ── Token validation ─────────────────────────────────── */
-    // adminDb.auth.getUser() validates the JWT signature + expiry via Supabase Auth server.
-    // This is equivalent to JWT enforcement ON — we do it manually for consistent behaviour.
-    const { data: { user }, error: authErr } = await adminDb.auth.getUser(token);
+    // Use userDb (anon key) to validate the JWT — avoids depending on SUPABASE_SERVICE_ROLE_KEY
+    // being present for auth validation. userDb already has the JWT in its global headers,
+    // so auth.getUser(token) sends: Authorization: Bearer {user_jwt} + apikey: {anon_key}.
+    const { data: { user }, error: authErr } = await userDb.auth.getUser(token);
 
     if (authErr || !user) {
       const detail = authErr?.message ?? 'Token invalid or expired.';
@@ -903,11 +913,23 @@ LAYOUT (set_layout):
   dashboard_card_min_width, item_card_density, ai_panel_size
 
 RULES:
-- Always include a "quantity" number field when creating a category.
 - table_name must be lowercase snake_case.
 - Always confirm with the user before deleting anything or removing a field.
 - Be concise. Summarize what changed after each action.
-- To navigate: say "navigate to inventory.html?table=TABLE_NAME"`;
+- To navigate: say "navigate to inventory.html?table=TABLE_NAME"
+
+CATEGORY CREATION RULES:
+- fields[0] MUST be the item identity/name field (field_type: "text", required: true). This is shown as the card title.
+- fields[1] MUST be the quantity field (field_type: "number"). This is shown as the stock count badge.
+- fields[2+] are any additional custom fields the user requests.
+- NEVER put a price, cost, type, unit, or any non-name field at position 0. Position 0 is always the human-readable item name.
+- Always include a relevant emoji icon for the category.
+
+DATA INSERTION RULES:
+- ALWAYS call get_fields before upsert_item. Never guess field names.
+- Use the exact field_name values from get_fields. Values must match field_type (number fields need numbers, text fields need strings).
+- To insert multiple items: call upsert_item once per item separately. Do not batch multiple items in one call.
+- The field with sort_order 0 (lowest) is the item's name — always put the human-readable item name in that field.`;
 
     const messages: Array<{ role: string; content: unknown }> = [
       { role: 'user', content: userMessage },

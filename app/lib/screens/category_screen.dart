@@ -58,23 +58,148 @@ class _CategoryScreenState extends State<CategoryScreen> {
     return val.isNotEmpty ? val : 'Item';
   }
 
-  // Show remaining fields (skip title) as a subtitle.
-  String _itemSummary(
-      Map<String, dynamic> item, List<Map<String, dynamic>> fields) {
+  // Build item card matching the HTML preview format:
+  //   ITEM NAME label → large bold identity value
+  //   Uppercase secondary descriptor (extra fields)
+  //   Divider footer → quantity badge left, extra field right
+  Widget _buildItemCard(
+      BuildContext context, Map<String, dynamic> item, List<Map<String, dynamic>> fields) {
+    final theme = Theme.of(context);
     final userFields = _userFields(fields);
-    if (userFields.length <= 1) return '';
-    final parts = userFields
-        .skip(1)
-        .take(3)
-        .map((f) {
-          final name = f['field_name'] as String? ?? '';
-          final val = item[name];
-          if (val == null || val.toString().isEmpty) return null;
-          return val.toString();
-        })
-        .whereType<String>()
-        .toList();
-    return parts.join(' · ');
+    if (userFields.isEmpty) return const SizedBox.shrink();
+
+    // Identity (field[0]) → large title
+    final identityKey = userFields[0]['field_name'] as String;
+    final identityVal = item[identityKey]?.toString() ?? '';
+
+    // Count (field[1]) → quantity badge
+    final hasCount = userFields.length > 1;
+    final countKey = hasCount ? userFields[1]['field_name'] as String : null;
+    final countVal = countKey != null ? item[countKey]?.toString() ?? '' : '';
+
+    // Extra fields (field[2+]) with non-empty values
+    final extras = userFields.skip(2).where((f) {
+      return (item[f['field_name']]?.toString() ?? '').isNotEmpty;
+    }).toList();
+
+    // First extra → shown as secondary desc (uppercase under title)
+    final secVal = extras.isNotEmpty
+        ? item[extras[0]['field_name']]?.toString() ?? ''
+        : '';
+
+    // Second extra → right side of footer
+    final rightField = extras.length > 1 ? extras[1] : null;
+    final rightLabel = rightField != null
+        ? (rightField['display_name'] as String? ?? rightField['field_name'] as String).toUpperCase()
+        : '';
+    final rightVal = rightField != null
+        ? item[rightField['field_name']]?.toString() ?? ''
+        : '';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // "ITEM NAME" micro-label
+          Text(
+            'ITEM NAME',
+            style: TextStyle(
+              fontSize: 10,
+              letterSpacing: 0.9,
+              fontWeight: FontWeight.w500,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.42),
+            ),
+          ),
+          const SizedBox(height: 2),
+          // Large bold identity value
+          Text(
+            identityVal.isNotEmpty ? identityVal : 'Item',
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              height: 1.15,
+            ),
+          ),
+          // Secondary desc: first extra field, uppercase spaced
+          if (secVal.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              secVal.toUpperCase(),
+              style: TextStyle(
+                fontSize: 11,
+                letterSpacing: 1.1,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+          ],
+          // Footer
+          if (hasCount || rightField != null) ...[
+            const SizedBox(height: 12),
+            Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.6)),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Quantity badge
+                if (hasCount && countVal.isNotEmpty) ...[
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'QTY',
+                        style: TextStyle(
+                          fontSize: 10,
+                          letterSpacing: 0.9,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.42),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '$countVal units',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const Spacer(),
+                // Right-side extra field
+                if (rightField != null && rightVal.isNotEmpty)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        rightLabel,
+                        style: TextStyle(
+                          fontSize: 10,
+                          letterSpacing: 0.9,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.42),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        rightVal,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Future<void> _showItemSheet(
@@ -82,12 +207,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
     Map<String, dynamic>? existing,
   }) async {
     final userFields = _userFields(fields);
-    final controllers = <String, TextEditingController>{
-      for (final f in userFields)
-        f['field_name'] as String: TextEditingController(
-          text: existing?[f['field_name']]?.toString() ?? '',
-        ),
-    };
 
     final goManage = await showModalBottomSheet<bool>(
       context: context,
@@ -98,7 +217,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
       ),
       builder: (ctx) => _ItemForm(
         fields: userFields,
-        controllers: controllers,
+        existing: existing,
         isEdit: existing != null,
         onSave: (data) async {
           if (existing != null) data['id'] = existing['id'];
@@ -108,10 +227,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
         onManageFields: () => Navigator.pop(ctx, true),
       ),
     );
-
-    for (final c in controllers.values) {
-      c.dispose();
-    }
 
     if (goManage == true) {
       await _showManageSheet(fields);
@@ -344,8 +459,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
             itemBuilder: (context, index) {
               final item = items[index];
               final title = _itemTitle(item, data.fields);
-              final subtitle = _itemSummary(item, data.fields);
-
               final itemId = item['id'].toString();
               return Dismissible(
                 key: ValueKey(itemId),
@@ -399,11 +512,10 @@ class _CategoryScreenState extends State<CategoryScreen> {
                   _reload();
                 },
                 child: Card(
-                  child: ListTile(
-                    title: Text(title,
-                        style: const TextStyle(fontWeight: FontWeight.w500)),
-                    subtitle: subtitle.isNotEmpty ? Text(subtitle) : null,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
                     onTap: () => _showItemSheet(data.fields, existing: item),
+                    child: _buildItemCard(context, item, data.fields),
                   ),
                 ),
               );
@@ -749,12 +861,14 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
   }
 
   Widget _buildRequiredFieldTile(
-      BuildContext context, Map<String, dynamic> field, bool showDivider) {
+      BuildContext context, Map<String, dynamic> field, bool showDivider,
+      {required int index}) {
     final theme = Theme.of(context);
     final fn = field['field_name'] as String;
-    final dn = field['display_name'] as String? ?? fn;
     final ft = field['field_type'] as String? ?? 'text';
     final isBusy = _busyField == fn;
+    final roleLabel = index == 0 ? 'Identity' : 'Count';
+    final dn = index == 0 ? 'Item Name' : 'Quantity';
 
     return Column(
       children: [
@@ -772,7 +886,7 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  'Required',
+                  roleLabel,
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -955,7 +1069,8 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
                           .map((e) => _buildRequiredFieldTile(
                               context,
                               e.value,
-                              e.key < anchorFields.length - 1))
+                              e.key < anchorFields.length - 1,
+                              index: e.key))
                           .toList(),
                     ),
                   ),
@@ -1014,14 +1129,14 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
 
 class _ItemForm extends StatefulWidget {
   final List<Map<String, dynamic>> fields;
-  final Map<String, TextEditingController> controllers;
+  final Map<String, dynamic>? existing;
   final bool isEdit;
   final Future<void> Function(Map<String, dynamic>) onSave;
   final VoidCallback? onManageFields;
 
   const _ItemForm({
     required this.fields,
-    required this.controllers,
+    required this.existing,
     required this.isEdit,
     required this.onSave,
     this.onManageFields,
@@ -1032,7 +1147,27 @@ class _ItemForm extends StatefulWidget {
 }
 
 class _ItemFormState extends State<_ItemForm> {
+  late final Map<String, TextEditingController> _controllers;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers = {
+      for (final f in widget.fields)
+        f['field_name'] as String: TextEditingController(
+          text: widget.existing?[f['field_name']]?.toString() ?? '',
+        ),
+    };
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
 
   Future<void> _submit() async {
     if (!mounted) return;
@@ -1041,7 +1176,7 @@ class _ItemFormState extends State<_ItemForm> {
       final data = <String, dynamic>{
         for (final f in widget.fields)
           f['field_name'] as String:
-              widget.controllers[f['field_name']]?.text.trim() ?? '',
+              _controllers[f['field_name']]?.text.trim() ?? '',
       };
       await widget.onSave(data);
       if (mounted) Navigator.pop(context);
@@ -1099,7 +1234,7 @@ class _ItemFormState extends State<_ItemForm> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: TextField(
-                controller: widget.controllers[fieldName],
+                controller: _controllers[fieldName],
                 keyboardType: isNumber
                     ? const TextInputType.numberWithOptions(decimal: true)
                     : TextInputType.text,
