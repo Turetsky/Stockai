@@ -6,6 +6,7 @@
     <title>Dashboard - StockAI</title>
     <!-- Instant theme from localStorage (inline, runs before render) -->
     <script>
+    // Apply saved theme colors from localStorage instantly before the page renders (prevents color flash)
     (function(){try{var t=JSON.parse(localStorage.getItem('inv_theme')||'{}'),r=document.documentElement,m={primary_color_start:'--clr-start',primary_color_end:'--clr-end',accent_color:'--clr-accent',bg_color:'--clr-bg',card_color:'--clr-card',card_radius:'--card-radius',font_size_base:'--font-base',text_primary_color:'--clr-text-primary',text_secondary_color:'--clr-text-secondary',dashboard_card_min_width:'--dash-card-min',sidebar_bg:'--clr-sidebar-bg',sidebar_header:'--clr-sidebar-header',sidebar_text:'--clr-sidebar-text',sidebar_title:'--clr-sidebar-title'};for(var k in m)if(t[k])r.style.setProperty(m[k],t[k])}catch(e){}})();
     </script>
     <style>
@@ -654,6 +655,7 @@
 
     <script src="/config.js"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
+    <script src="auth.js"></script>
     <script src="sidebar.js"></script>
     <script>
         const SUPABASE_URL = window.SUPABASE_URL || 'https://masngvxdbxqrrreszjxv.supabase.co';
@@ -662,14 +664,14 @@
         let currentSort = 'name_asc';
         let currentFilter = '';
 
-        // Initialize when sidebar is ready
+        // Wait for sidebar.js to finish loading auth + user data, then boot the dashboard
         window.addEventListener('sidebar-ready', async () => {
             const profile = window.currentProfile;
             document.getElementById('welcomeText').textContent = `Welcome back, ${profile?.display_name || 'User'}`;
             await loadInventoryCards();
         });
 
-        // Load inventory cards from table_definitions
+        // Fetch all categories for this user from Supabase and render them as cards
         async function loadInventoryCards() {
             try {
                 const db = window.db;
@@ -705,7 +707,7 @@
             }
         }
 
-        // Load item counts and quantities for each table
+        // For each category, count total items and sum quantities so the card can show them
         async function loadCounts() {
             const db = window.db;
 
@@ -718,7 +720,7 @@
                     if (!error && data) {
                         table._count = data.length;
 
-                        // Sum quantity directly from item data
+                        // Add up quantity/qty field across all items in this category
                         table._qty = data.reduce((sum, item) => {
                             const val = item.quantity ?? item.qty ?? 0;
                             return sum + (typeof val === 'number' ? val : 0);
@@ -730,7 +732,7 @@
             }
         }
 
-        // Apply current sort and filter
+        // Filter by search text then sort, then re-render the cards
         function applySortAndFilter() {
             let filtered = allTables;
 
@@ -747,7 +749,7 @@
             renderCards(sorted);
         }
 
-        // Sort tables based on current sort selection
+        // Return a sorted copy of the categories array based on the user's chosen sort button
         function sortTables(tables) {
             const t = [...tables];
 
@@ -771,7 +773,7 @@
             return t;
         }
 
-        // Render cards to the grid
+        // Build HTML for each category card and inject it into the grid
         function renderCards(tables) {
             const grid = document.getElementById('inventoryGrid');
 
@@ -799,19 +801,19 @@
             `).join('');
         }
 
-        // Render empty state
+        // Show a centered message when there are no categories or search has no results
         function renderEmptyState(message) {
             const grid = document.getElementById('inventoryGrid');
             grid.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
         }
 
-        // Filter cards by search query
+        // Called on every keystroke in the search box — re-filters and re-renders cards
         function filterCards(query) {
             currentFilter = query;
             applySortAndFilter();
         }
 
-        // Sort button handler
+        // Wire up sort buttons and restore the user's last chosen sort from localStorage
         document.addEventListener('DOMContentLoaded', () => {
             const sortButtons = document.querySelectorAll('.sort-btn');
             sortButtons.forEach(btn => {
@@ -836,11 +838,12 @@
             }
         });
 
+        // Navigate to inventory.html passing the table name so it knows which category to load
         function navigateToCategory(tableName) {
             window.location.href = 'inventory.html?table=' + encodeURIComponent(tableName);
         }
 
-        // Modal functions
+        // Show/hide the "Create New Category" popup modal
         function showAddCategoryModal() {
             document.getElementById('addCatModal').style.display = 'flex';
             document.getElementById('catError').style.display = 'none';
@@ -868,7 +871,7 @@
             `;
         }
 
-        // Add a field row to the fields list
+        // Append a blank field row when user clicks "+ Add Field" in the category creation form
         function addFieldRow() {
             const fieldsList = document.getElementById('fieldsList');
             const newRow = document.createElement('div');
@@ -881,7 +884,7 @@
             fieldsList.appendChild(newRow);
         }
 
-        // Create category
+        // Submit the new category form — calls the Edge Function which creates the DB table
         async function createCategory(event) {
             event.preventDefault();
 
@@ -912,7 +915,7 @@
                 return;
             }
 
-            // Generate table name
+            // Build a unique table name: prefix with user id slice so two users can have same category name
             const userId = window.currentSession?.user?.id || 'unknown';
             const sanitized = catName
                 .toLowerCase()
@@ -920,14 +923,14 @@
                 .replace(/^_|_$/g, '');
             const tableName = `p_${userId.substring(0, 8)}_${sanitized}`;
 
-            // Disable button and show loading
+            // Disable the button while the request is in-flight so user can't double-submit
             const createBtn = document.getElementById('createCatBtn');
             const originalText = createBtn.textContent;
             createBtn.disabled = true;
             createBtn.textContent = 'Creating…';
 
             try {
-                // Always get a fresh token — cached window.currentSession can go stale
+                // Always refresh the JWT — a cached token may be expired and the Edge Function will reject it
                 const { data: sessionData } = await window.db.auth.getSession();
                 const token = sessionData?.session?.access_token || window.currentSession?.access_token;
                 if (!token) throw new Error('Not authenticated');
@@ -956,7 +959,7 @@
                     throw new Error(result.error?.message || 'Failed to create category');
                 }
 
-                // Success - reload and close
+                // Category created — close the modal, refresh cards, and tell the sidebar to update its nav list
                 hideAddCategoryModal();
                 await loadInventoryCards();
                 window.dispatchEvent(new Event('categories-updated'));
@@ -971,14 +974,14 @@
             }
         }
 
-        // Escape HTML to prevent XSS
+        // Sanitize user-supplied text before inserting into innerHTML to prevent XSS
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
 
-        // ── Export All Categories as CSV files ────────────────────────────
+        // Download every category's items as separate CSV files (one file per category)
         async function exportAllCategories() {
             const btn = document.getElementById('exportAllBtn');
             btn.disabled = true;
@@ -1031,14 +1034,14 @@
                     const displayNames = fields.map(f => f.display_name);
 
                     const csvRows = [
-                        '#fields:' + fieldNames.join(','),            // mapping row (for re-import)
-                        displayNames.map(escape).join(','),           // human-readable header
+                        '#fields:' + fieldNames.join(','),            // hidden mapping row so re-import knows which column is which
+                        displayNames.map(escape).join(','),           // human-readable column headers
                         ...(items || []).map(item =>
                             fieldNames.map(n => escape(item[n])).join(',')
                         ),
                     ];
 
-                    const csv  = '\uFEFF' + csvRows.join('\n');       // BOM for Excel/Sheets UTF-8
+                    const csv  = '\uFEFF' + csvRows.join('\n');       // BOM prefix so Excel/Sheets opens it as UTF-8
                     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                     const url  = URL.createObjectURL(blob);
                     const a    = document.createElement('a');
@@ -1050,7 +1053,7 @@
                     URL.revokeObjectURL(url);
                     exported++;
 
-                    // Small delay between downloads so browser doesn't block them
+                    // Brief pause between files — browsers block rapid simultaneous downloads
                     await new Promise(r => setTimeout(r, 400));
                 }
 
@@ -1065,7 +1068,7 @@
             btn.disabled = false;
         }
 
-        // Expose functions for AI assistant
+        // Expose reload function so the AI assistant can trigger a card refresh after making changes
         window.loadInventoryCards = loadInventoryCards;
         window.addEventListener('ai-refresh', loadInventoryCards);
     </script>

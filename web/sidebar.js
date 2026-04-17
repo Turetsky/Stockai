@@ -1,8 +1,10 @@
 /**
- * Sidebar Navigation Component
- * Shared IIFE that injects sidebar + auth guard into every page
+ * sidebar.js
+ * Builds and injects the sidebar UI into every page.
+ * Depends on auth.js running first — waits for the 'auth-ready' event.
  */
 (async function initializeSidebar() {
+
   // ============================================================================
   // 1. APPLY THEME FROM LOCALSTORAGE (before rendering)
   // ============================================================================
@@ -53,54 +55,18 @@
   }
 
   // ============================================================================
-  // 2. INITIALIZE SUPABASE CLIENT
+  // 2. WAIT FOR AUTH
+  // auth.js runs first and fires 'auth-ready' when login is confirmed.
+  // If auth is already done (authReady flag set), skip the wait.
   // ============================================================================
-  if (!window.supabase) {
-    console.error('Supabase library not loaded. Ensure <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script> is included.');
-    return;
+  if (!window.authReady) {
+    await new Promise(resolve => window.addEventListener('auth-ready', resolve, { once: true }));
   }
 
-  const SUPABASE_URL = window.SUPABASE_URL || 'https://masngvxdbxqrrreszjxv.supabase.co';
-  const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hc25ndnhkYnhxcnJyZXN6anh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3Njc5MzIsImV4cCI6MjA4NjM0MzkzMn0.QmHFsyeMUkwE7cW6N88k2eSk2BpyXit2UxVlqXxl4zE';
-
-  if (!window.db) {
-    window.db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  }
+  const user = window.currentUser;
 
   // ============================================================================
-  // 3. AUTH GUARD
-  // ============================================================================
-  let session = null;
-  let user = null;
-
-  try {
-    const { data, error } = await window.db.auth.getSession();
-    if (error) throw error;
-    session = data.session;
-    user = data.session?.user;
-  } catch (e) {
-    console.error('Auth check failed:', e);
-  }
-
-  if (!session || !user) {
-    window.location.href = 'landing.html';
-    return;
-  }
-
-  window.currentSession = session;
-  window.currentUser = user;
-
-  // Keep window.currentSession up to date when Supabase auto-refreshes the token.
-  // Without this, access_token goes stale after ~1 hour and JWT enforcement rejects it.
-  window.db.auth.onAuthStateChange((event, newSession) => {
-    if (newSession) {
-      window.currentSession = newSession;
-      window.currentUser    = newSession.user;
-    }
-  });
-
-  // ============================================================================
-  // 4. LOAD USER PROFILE
+  // 3. LOAD USER PROFILE
   // ============================================================================
   let profile = null;
   try {

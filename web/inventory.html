@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inventory - StockAI</title>
     <script>
+    // Apply saved theme colors from localStorage instantly before page renders (prevents color flash)
     (function(){try{var t=JSON.parse(localStorage.getItem('inv_theme')||'{}'),r=document.documentElement,m={primary_color_start:'--clr-start',primary_color_end:'--clr-end',header_text_color:'--clr-header-text',accent_color:'--clr-accent',bg_color:'--clr-bg',card_color:'--clr-card',card_radius:'--card-radius',font_size_base:'--font-base',text_primary_color:'--clr-text-primary',text_secondary_color:'--clr-text-secondary',item_card_bg:'--clr-item-card',stats_bar_bg:'--clr-stats-bar',low_stock_color:'--clr-low-stock',btn_add_bg:'--clr-btn-add',btn_edit_bg:'--clr-btn-edit',btn_del_bg:'--clr-btn-del',sidebar_bg:'--clr-sidebar-bg',sidebar_header:'--clr-sidebar-header',sidebar_text:'--clr-sidebar-text',sidebar_title:'--clr-sidebar-title'};for(var k in m)if(t[k])r.style.setProperty(m[k],t[k])}catch(e){}})();
     </script>
     <script src="/config.js"></script>
@@ -311,6 +312,7 @@
         <div id="root"><div class="center-msg">Loading...</div></div>
     </main>
 
+    <script src="auth.js"></script>
     <script src="sidebar.js"></script>
     <script type="text/babel">
         const { useState, useEffect, useCallback } = React;
@@ -333,17 +335,19 @@
             const [ready,          setReady]          = useState(false);
             const [importLoading,  setImportLoading]  = useState(false);
 
-            // Wait for sidebar auth
+            // Wait for sidebar.js to finish auth before doing anything — sets ready=true to unblock other effects
             useEffect(() => {
                 const handler = () => setReady(true);
                 window.addEventListener('sidebar-ready', handler);
-                // In case it already fired
+                // In case sidebar already fired before this component mounted
                 if (window.currentSession) setReady(true);
                 return () => window.removeEventListener('sidebar-ready', handler);
             }, []);
 
+            // Main init effect — reads ?table= from the URL, loads theme, restores sort pref, then fetches data
             useEffect(() => {
                 if (!ready) return;
+                // Read which category table to show from the URL query param
                 const table = new URLSearchParams(window.location.search).get('table');
                 if (!table) { window.location.href = 'index.html'; return; }
                 setTableName(table);
@@ -358,7 +362,7 @@
                     if (theme.item_card_density) document.documentElement.style.setProperty('--item-pad', densityPad[theme.item_card_density] || densityPad.normal);
                 } catch(e) {}
 
-                // Then sync from Supabase to pick up any AI-changed settings
+                // Then pull fresh settings from Supabase in case AI changed them since last visit
                 (async () => { try {
                     const db = window.db;
                     const userId = window.currentUser?.id;
@@ -389,7 +393,7 @@
                     }
                 } catch(e) { console.warn('Theme sync failed:', e.message); } })();
 
-                // Load saved sort preference for this table
+                // Restore the sort field/direction the user last used for this specific category
                 const savedSort = localStorage.getItem(`sort_${table}`);
                 if (savedSort) {
                     try {
@@ -402,16 +406,19 @@
                 loadTableStructure(table);
             }, [ready]);
 
+            // Once we have the table name and its field definitions, fetch the actual items
             useEffect(() => {
                 if (tableName && fields.length > 0) fetchItems();
             }, [tableName, fields]);
 
+            // Expose fetchItems globally so the AI assistant can trigger a reload after making changes
             useEffect(() => {
                 window.fetchItemsGlobal = fetchItems;
                 window.addEventListener('ai-refresh', fetchItems);
                 return () => window.removeEventListener('ai-refresh', fetchItems);
             }, [tableName, fields]);
 
+            // Load the category metadata (display name, icon) and its field definitions from Supabase
             const loadTableStructure = async (table) => {
                 try {
                     const db = window.db;
@@ -443,6 +450,7 @@
                 }
             };
 
+            // Fetch all items from this category's table, newest first
             const fetchItems = async () => {
                 setLoading(true);
                 try {
@@ -454,12 +462,14 @@
                 setLoading(false);
             };
 
+            // Return an empty form object with correct default values per field type (0 for numbers, '' for text)
             const blankForm = () => {
                 const init = {};
                 fields.forEach(f => { init[f.field_name] = f.field_type === 'number' ? 0 : ''; });
                 return init;
             };
 
+            // Persist the user's sort choice per category so it survives page refreshes
             const saveSortPref = (field, dir) => {
                 if (tableName) localStorage.setItem(`sort_${tableName}`, JSON.stringify({ field, dir }));
             };
@@ -473,11 +483,13 @@
                 saveSortPref(sortField, newDir);
             };
 
+            // Save the form — updates existing item if editingId is set, otherwise inserts a new one
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 try {
                     const db = window.db;
                     if (editingId) {
+                        // Editing — update the row that matches this id
                         const { error } = await db.from(tableName).update(formData).eq('id', editingId);
                         if (error) throw error;
                     } else {
@@ -492,6 +504,7 @@
                 } catch (err) { alert('Error saving: ' + err.message); }
             };
 
+            // Pre-fill the form with the clicked item's data and scroll to top so the form is visible
             const startEdit = (item) => {
                 const d = {};
                 fields.forEach(f => { d[f.field_name] = item[f.field_name] ?? (f.field_type === 'number' ? 0 : ''); });
@@ -499,6 +512,7 @@
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             };
 
+            // Confirm then delete the item from Supabase, then remove it from local state
             const handleDelete = async (id) => {
                 if (!confirm('Delete this item?')) return;
                 const db = window.db;
@@ -509,7 +523,7 @@
 
             const cancelForm = () => { setEditingId(null); setShowAddForm(false); setFormData(blankForm()); };
 
-            // ── CSV parser (handles quoted fields with commas inside) ──────────
+            // Parse raw CSV text into a 2D array of cells, correctly handling quoted fields that contain commas
             const parseCSV = (text) => {
                 const rows = [];
                 // Normalize line endings
@@ -536,12 +550,12 @@
                 return rows;
             };
 
-            // ── Export current table as CSV ───────────────────────────────────
+            // Build a CSV string from current items and trigger a browser download
             const exportCSV = () => {
                 if (!fields.length) return;
                 if (!items.length) { alert('No items to export.'); return; }
 
-                // Header row uses internal field_names so re-import works reliably
+                // Use internal field_names (not display names) as the data key order so re-import can map columns reliably
                 const fieldNames = fields.map(f => f.field_name);
                 const displayNames = fields.map(f => f.display_name);
 
@@ -560,8 +574,7 @@
                     ...items.map(item => fieldNames.map(n => escape(item[n])).join(',')),
                 ];
 
-                // Also embed field_names as a comment in the first cell so import
-                // can find the mapping: we'll prefix with # as a hidden mapping row
+                // Prepend a hidden #fields: row so the importer knows the exact column-to-field mapping
                 const mappingRow = '#fields:' + fieldNames.join(',');
                 const finalCSV = [mappingRow, ...csvRows].join('\n');
 
@@ -576,7 +589,7 @@
                 URL.revokeObjectURL(url);
             };
 
-            // ── Import items from CSV ─────────────────────────────────────────
+            // Read a CSV file chosen by the user and insert each row as a new item
             const handleImport = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -592,7 +605,7 @@
                         return;
                     }
 
-                    // Check if row[0] is a #fields: mapping row (from our own export)
+                    // Detect whether this CSV came from our own exporter (has #fields: row) or is a plain external CSV
                     let fieldNameRow = null;
                     let headerRow    = null;
                     let dataStartIdx = 0;
@@ -613,7 +626,7 @@
                         dataStartIdx = 1;
                     }
 
-                    // Build column index → field mapping
+                    // Map each CSV column index to its matching field definition (by field_name or display_name)
                     const colMap = {}; // colIndex → field definition
                     const headers = fieldNameRow || headerRow;
                     headers.forEach((col, idx) => {
@@ -672,6 +685,7 @@
                 setImportLoading(false);
             };
 
+            // Filter items to only those where any field value contains the search term
             const filtered = items.filter(item =>
                 !searchTerm || fields.some(f => {
                     const v = item[f.field_name];
@@ -679,6 +693,7 @@
                 })
             );
 
+            // Sort the filtered items by the chosen field, handling nulls and mixed number/string values
             const displayItems = sortField
                 ? [...filtered].sort((a, b) => {
                     const aVal = a[sortField];
@@ -866,7 +881,7 @@
             );
         }
 
-        // Wait for sidebar to be ready, then render
+        // Mount the React app once sidebar auth is confirmed
         function init() {
             ReactDOM.render(<InventoryApp />, document.getElementById('root'));
         }
