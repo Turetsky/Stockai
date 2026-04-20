@@ -1,54 +1,30 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - StockAI</title>
-    <!-- Instant theme from localStorage (inline, runs before render) -->
+<!-- ============================================================
+     1. SETUP — tells the browser what this file is and how to read it
+     ============================================================ -->
+<!DOCTYPE html>  <!-- this is an HTML5 document -->
+<html lang="en"> <!-- the page language is English -->
+<head>           <!-- invisible section: instructions for the browser -->
+    <meta charset="UTF-8">                                    <!-- support all characters (emojis, Hebrew, etc.) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- don't zoom out on mobile -->
+    <title>Dashboard - StockAI</title> <!-- text shown in the browser tab -->
+
+    <!-- ============================================================
+         2. INSTANT THEME — runs before anything renders to prevent color flash
+         reads your saved colors from localStorage and applies them immediately
+         ============================================================ -->
     <script>
     // Apply saved theme colors from localStorage instantly before the page renders (prevents color flash)
     (function(){try{var t=JSON.parse(localStorage.getItem('inv_theme')||'{}'),r=document.documentElement,m={primary_color_start:'--clr-start',primary_color_end:'--clr-end',accent_color:'--clr-accent',bg_color:'--clr-bg',card_color:'--clr-card',card_radius:'--card-radius',font_size_base:'--font-base',text_primary_color:'--clr-text-primary',text_secondary_color:'--clr-text-secondary',dashboard_card_min_width:'--dash-card-min',sidebar_bg:'--clr-sidebar-bg',sidebar_header:'--clr-sidebar-header',sidebar_text:'--clr-sidebar-text',sidebar_title:'--clr-sidebar-title'};for(var k in m)if(t[k])r.style.setProperty(m[k],t[k])}catch(e){}})();
     </script>
+
+    <!-- ============================================================
+         3. CSS STYLES — all the visual design for the dashboard
+         (card grid, search bar, sort buttons, modal popup, etc.)
+         ============================================================ -->
+    <link rel="stylesheet" href="/global.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        html {
-            font-size: var(--font-base, 16px);
-        }
-
         :root {
-            --clr-start: #667eea;
-            --clr-end: #764ba2;
-            --clr-accent: #667eea;
-            --clr-bg: #eef0f6;
-            --clr-card: #ffffff;
-            --card-radius: 12px;
-            --font-base: 15px;
-            --clr-text-primary: #1a1a2e;
-            --clr-text-secondary: #555;
-            --clr-text-label: #888;
             --dash-card-min: 280px;
-            --shadow-sm: 0 2px 8px rgba(102,126,234,0.10);
-            --shadow-md: 0 4px 16px rgba(102,126,234,0.14);
-            --shadow-lg: 0 8px 24px rgba(102,126,234,0.18);
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background-color: var(--clr-bg);
-            color: var(--clr-text-primary);
-            font-size: var(--font-base);
-            line-height: 1.5;
-            opacity: 0;
-            transition: opacity 0.15s ease;
-        }
-
-        body.loaded {
-            opacity: 1;
         }
 
         .main-content {
@@ -572,9 +548,16 @@
         }
     </style>
 </head>
-<body style="opacity:0;transition:opacity 0.15s">
+
+<!-- ============================================================
+     4. BODY — everything the user sees on screen
+     Starts invisible via global.css (opacity:0).
+     sidebar.js adds the 'loaded' class once setup finishes → page fades in.
+     ============================================================ -->
+<body>
     <main class="main-content" id="mainContent">
-        <!-- Page title bar -->
+
+        <!-- ── PAGE TITLE BAR ── "Dashboard" heading + Export All button -->
         <div class="page-bar">
             <div>
                 <h1 class="page-title">Dashboard</h1>
@@ -585,7 +568,7 @@
             </button>
         </div>
 
-        <!-- Search + Sort section -->
+        <!-- ── SEARCH + SORT ── search box and sort buttons (A→Z, Most Items, etc.) -->
         <div class="controls-bar">
             <div class="search-wrap">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -603,15 +586,15 @@
             </div>
         </div>
 
-        <!-- Add Category button -->
+        <!-- ── NEW CATEGORY BUTTON ── opens the modal popup -->
         <button class="add-cat-btn" onclick="showAddCategoryModal()">+ New Category</button>
 
-        <!-- Inventory cards grid -->
+        <!-- ── CARD GRID ── empty on load, filled by JavaScript after auth-ready fires -->
         <div class="inventory-grid" id="inventoryGrid">
             <div class="empty-state">Loading…</div>
         </div>
 
-        <!-- Add Category Modal (hidden by default) -->
+        <!-- ── NEW CATEGORY MODAL ── hidden by default, shown when + New Category is clicked -->
         <div class="modal-overlay" id="addCatModal" style="display:none">
             <div class="modal-card">
                 <div class="modal-header">
@@ -653,19 +636,28 @@
         </div>
     </main>
 
-    <script src="/config.js"></script>
-    <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
-    <script src="auth.js"></script>
-    <script src="sidebar.js"></script>
+    <!-- ============================================================
+         5. SCRIPT LOADING ORDER — must be in this exact order
+         each one depends on the one above it being loaded first
+         ============================================================ -->
+    <script src="/config.js"></script>                                              <!-- 1. sets SUPABASE_URL + SUPABASE_ANON_KEY on window -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script> <!-- 2. downloads Supabase library → puts window.supabase on window -->
+    <script src="auth.js"></script>                                                 <!-- 3. login check + profile load → fires auth-ready -->
+    <script src="sidebar.js"></script>                                              <!-- 4. builds and injects the sidebar UI -->
+
+    <!-- ============================================================
+         6. DASHBOARD SCRIPT — the brains of this page
+         waits for auth-ready, then loads and renders the category cards
+         ============================================================ -->
     <script>
-        const SUPABASE_URL = window.SUPABASE_URL || 'https://masngvxdbxqrrreszjxv.supabase.co';
+        const SUPABASE_URL = window.SUPABASE_URL;
 
         let allTables = [];
         let currentSort = 'name_asc';
         let currentFilter = '';
 
         // Wait for sidebar.js to finish loading auth + user data, then boot the dashboard
-        window.addEventListener('sidebar-ready', async () => {
+        window.addEventListener('auth-ready', async () => {
             const profile = window.currentProfile;
             document.getElementById('welcomeText').textContent = `Welcome back, ${profile?.display_name || 'User'}`;
             await loadInventoryCards();
@@ -962,7 +954,7 @@
                 // Category created — close the modal, refresh cards, and tell the sidebar to update its nav list
                 hideAddCategoryModal();
                 await loadInventoryCards();
-                window.dispatchEvent(new Event('categories-updated'));
+                window.dispatchEvent(new CustomEvent('data-changed'));
 
             } catch (err) {
                 console.error('Error creating category:', err);
@@ -1068,10 +1060,14 @@
             btn.disabled = false;
         }
 
-        // Expose reload function so the AI assistant can trigger a card refresh after making changes
+        // Expose reload function and listen for the app-wide data-changed event
         window.loadInventoryCards = loadInventoryCards;
-        window.addEventListener('ai-refresh', loadInventoryCards);
+        window.addEventListener('data-changed', loadInventoryCards);
     </script>
+    <!-- ============================================================
+         7. AI CHAT BUBBLE — loaded last so it doesn't slow down the page
+         injects the floating chat button in the bottom corner
+         ============================================================ -->
     <script src="ai-assistant-v4.js"></script>
 </body>
 </html>

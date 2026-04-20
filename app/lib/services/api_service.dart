@@ -145,6 +145,23 @@ class ApiService {
     }
   }
 
+  Future<void> createCategory(String displayName, String icon) async {
+    final token = await _freshToken();
+    final tableName = displayName
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), '_')
+        .replaceAll(RegExp(r'[^a-z0-9_]'), '');
+    await _directToolCall('create_category', {
+      'table_name': tableName,
+      'display_name': displayName,
+      'icon': icon.isNotEmpty ? icon : '📦',
+      'fields': [
+        {'field_name': 'name', 'display_name': 'Name', 'field_type': 'text', 'required': true},
+        {'field_name': 'quantity', 'display_name': 'Quantity', 'field_type': 'number', 'required': false},
+      ],
+    }, token);
+  }
+
   Future<void> addField(String tableName, String fieldName, String displayName,
       String fieldType) async {
     final token = await _freshToken();

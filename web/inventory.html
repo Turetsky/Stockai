@@ -1,52 +1,35 @@
+<!-- ============================================================
+     1. SETUP
+     ============================================================ -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inventory - StockAI</title>
+
+    <!-- ============================================================
+         2. INSTANT THEME
+         ============================================================ -->
     <script>
-    // Apply saved theme colors from localStorage instantly before page renders (prevents color flash)
     (function(){try{var t=JSON.parse(localStorage.getItem('inv_theme')||'{}'),r=document.documentElement,m={primary_color_start:'--clr-start',primary_color_end:'--clr-end',header_text_color:'--clr-header-text',accent_color:'--clr-accent',bg_color:'--clr-bg',card_color:'--clr-card',card_radius:'--card-radius',font_size_base:'--font-base',text_primary_color:'--clr-text-primary',text_secondary_color:'--clr-text-secondary',item_card_bg:'--clr-item-card',stats_bar_bg:'--clr-stats-bar',low_stock_color:'--clr-low-stock',btn_add_bg:'--clr-btn-add',btn_edit_bg:'--clr-btn-edit',btn_del_bg:'--clr-btn-del',sidebar_bg:'--clr-sidebar-bg',sidebar_header:'--clr-sidebar-header',sidebar_text:'--clr-sidebar-text',sidebar_title:'--clr-sidebar-title'};for(var k in m)if(t[k])r.style.setProperty(m[k],t[k])}catch(e){}})();
     </script>
-    <script src="/config.js"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
+
+    <!-- ============================================================
+         3. CSS STYLES
+         ============================================================ -->
+    <link rel="stylesheet" href="/global.css">
     <style>
         :root {
-            --clr-start:   #667eea;
-            --clr-end:     #764ba2;
-            --clr-accent:  #667eea;
-            --clr-bg:      #eef0f6;
-            --clr-card:    #ffffff;
-            --card-radius: 12px;
-            --font-base:   15px;
             --clr-item-card:       #ffffff;
             --clr-stats-bar:       #ffffff;
             --clr-header-text:     #ffffff;
-            --clr-text-primary:    #1a1a2e;
-            --clr-text-secondary:  #555;
-            --clr-text-label:      #888;
             --clr-low-stock:       #ef4444;
             --clr-btn-add:         #22c55e;
             --clr-btn-edit:        #f59e0b;
             --clr-btn-del:         #ef4444;
             --item-pad:            18px 20px;
-            --shadow-sm: 0 2px 8px rgba(102,126,234,0.10);
-            --shadow-md: 0 4px 16px rgba(102,126,234,0.14);
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        html { font-size: var(--font-base, 16px); }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: var(--clr-bg);
-            color: var(--clr-text-primary);
-            font-size: var(--font-base);
-            opacity: 0;
-            transition: opacity 0.15s ease;
-        }
-        body.loaded { opacity: 1; }
 
         .main-content {
             padding: 24px 28px;
@@ -307,18 +290,34 @@
         }
     </style>
 </head>
-<body style="opacity:0;transition:opacity 0.15s">
+<!-- ============================================================
+     4. BODY
+     ============================================================ -->
+<body>
     <main class="main-content" id="mainContent">
         <div id="root"><div class="center-msg">Loading...</div></div>
     </main>
 
+    <!-- ============================================================
+         5. SCRIPT LOADING ORDER
+         ============================================================ -->
+    <script src="/config.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
     <script src="auth.js"></script>
     <script src="sidebar.js"></script>
+    <!-- ============================================================
+         6. INVENTORY APP
+         ============================================================ -->
     <script type="text/babel">
-        const { useState, useEffect, useCallback } = React;
-        const SUPABASE_URL = window.SUPABASE_URL || 'https://masngvxdbxqrrreszjxv.supabase.co';
+        const { useState, useEffect } = React;
 
         function InventoryApp() {
+            // ============================================================================
+            // 1. STATE
+            // ============================================================================
             const [tableName,      setTableName]      = useState('');
             const [tableInfo,      setTableInfo]      = useState(null);
             const [fields,         setFields]         = useState([]);
@@ -335,16 +334,25 @@
             const [ready,          setReady]          = useState(false);
             const [importLoading,  setImportLoading]  = useState(false);
 
-            // Wait for sidebar.js to finish auth before doing anything — sets ready=true to unblock other effects
+            // ============================================================================
+            // 2. WAIT FOR AUTH
+            // auth.js fires `auth-ready` once the user session is confirmed.
+            // We flip `ready` to true so the init effect below can run safely.
+            // ============================================================================
             useEffect(() => {
                 const handler = () => setReady(true);
-                window.addEventListener('sidebar-ready', handler);
-                // In case sidebar already fired before this component mounted
+                window.addEventListener('auth-ready', handler);
+                // Safety: sidebar may have fired before this component mounted.
                 if (window.currentSession) setReady(true);
-                return () => window.removeEventListener('sidebar-ready', handler);
+                return () => window.removeEventListener('auth-ready', handler);
             }, []);
 
-            // Main init effect — reads ?table= from the URL, loads theme, restores sort pref, then fetches data
+            // ============================================================================
+            // 3. INIT — READ URL, LOAD THEME, RESTORE SORT PREF
+            // Runs once auth is ready. Reads ?table= from the URL, hydrates theme
+            // (localStorage first, then fresh from Supabase), and restores the user's
+            // last-used sort for this category.
+            // ============================================================================
             useEffect(() => {
                 if (!ready) return;
                 // Read which category table to show from the URL query param
@@ -406,19 +414,27 @@
                 loadTableStructure(table);
             }, [ready]);
 
-            // Once we have the table name and its field definitions, fetch the actual items
+            // ============================================================================
+            // 4. FETCH DATA — runs after we know the table + its fields
+            // ============================================================================
+            // Load items once the table structure is ready.
             useEffect(() => {
                 if (tableName && fields.length > 0) fetchItems();
             }, [tableName, fields]);
 
-            // Expose fetchItems globally so the AI assistant can trigger a reload after making changes
+            // Expose fetchItems globally so the AI assistant can trigger a reload
+            // after it creates/updates/deletes items via the Edge Function.
             useEffect(() => {
                 window.fetchItemsGlobal = fetchItems;
-                window.addEventListener('ai-refresh', fetchItems);
-                return () => window.removeEventListener('ai-refresh', fetchItems);
+                window.addEventListener('data-changed', fetchItems);
+                return () => window.removeEventListener('data-changed', fetchItems);
             }, [tableName, fields]);
 
-            // Load the category metadata (display name, icon) and its field definitions from Supabase
+            // ============================================================================
+            // 5. LOAD TABLE STRUCTURE
+            // Pulls the category metadata (display name, icon) and its field definitions
+            // from Supabase, then seeds an empty form matching those fields.
+            // ============================================================================
             const loadTableStructure = async (table) => {
                 try {
                     const db = window.db;
@@ -450,7 +466,10 @@
                 }
             };
 
-            // Fetch all items from this category's table, newest first
+            // ============================================================================
+            // 6. FETCH ITEMS
+            // ============================================================================
+            // Fetch all items from this category's table, newest first.
             const fetchItems = async () => {
                 setLoading(true);
                 try {
@@ -462,14 +481,10 @@
                 setLoading(false);
             };
 
-            // Return an empty form object with correct default values per field type (0 for numbers, '' for text)
-            const blankForm = () => {
-                const init = {};
-                fields.forEach(f => { init[f.field_name] = f.field_type === 'number' ? 0 : ''; });
-                return init;
-            };
-
-            // Persist the user's sort choice per category so it survives page refreshes
+            // ============================================================================
+            // 7. SORT HELPERS
+            // ============================================================================
+            // Persist the user's sort choice per-category so it survives page refreshes.
             const saveSortPref = (field, dir) => {
                 if (tableName) localStorage.setItem(`sort_${tableName}`, JSON.stringify({ field, dir }));
             };
@@ -483,17 +498,26 @@
                 saveSortPref(sortField, newDir);
             };
 
-            // Save the form — updates existing item if editingId is set, otherwise inserts a new one
+            // ============================================================================
+            // 8. FORM HELPER + SAVE / EDIT / DELETE
+            // ============================================================================
+            // Return a fresh, empty form matching the current field types (0 for numbers, '' for text).
+            const blankForm = () => {
+                const init = {};
+                fields.forEach(f => { init[f.field_name] = f.field_type === 'number' ? 0 : ''; });
+                return init;
+            };
+
+            // Save the form — UPDATE if editingId is set, otherwise INSERT a new row.
+            // We stamp user_id on INSERT so Supabase's row-level security accepts it.
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 try {
                     const db = window.db;
                     if (editingId) {
-                        // Editing — update the row that matches this id
                         const { error } = await db.from(tableName).update(formData).eq('id', editingId);
                         if (error) throw error;
                     } else {
-                        // Include user_id so RLS insert check passes on v3 tables
                         const userId = window.currentUser?.id;
                         const insertData = userId ? { ...formData, user_id: userId } : formData;
                         const { error } = await db.from(tableName).insert([insertData]);
@@ -504,7 +528,7 @@
                 } catch (err) { alert('Error saving: ' + err.message); }
             };
 
-            // Pre-fill the form with the clicked item's data and scroll to top so the form is visible
+            // Pre-fill the form with an existing item's values and scroll up so it's visible.
             const startEdit = (item) => {
                 const d = {};
                 fields.forEach(f => { d[f.field_name] = item[f.field_name] ?? (f.field_type === 'number' ? 0 : ''); });
@@ -512,7 +536,7 @@
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             };
 
-            // Confirm then delete the item from Supabase, then remove it from local state
+            // Confirm, delete from Supabase, then drop it from the on-screen list.
             const handleDelete = async (id) => {
                 if (!confirm('Delete this item?')) return;
                 const db = window.db;
@@ -521,9 +545,14 @@
                 setItems(items.filter(i => i.id !== id));
             };
 
+            // Reset and close the add/edit form.
             const cancelForm = () => { setEditingId(null); setShowAddForm(false); setFormData(blankForm()); };
 
-            // Parse raw CSV text into a 2D array of cells, correctly handling quoted fields that contain commas
+            // ============================================================================
+            // 9. CSV — PARSE / EXPORT / IMPORT
+            // ============================================================================
+            // Parse raw CSV text into a 2D array of cells.
+            // Handles quoted fields that contain commas (e.g. "Smith, John").
             const parseCSV = (text) => {
                 const rows = [];
                 // Normalize line endings
@@ -550,7 +579,10 @@
                 return rows;
             };
 
-            // Build a CSV string from current items and trigger a browser download
+            // Build a CSV string from current items and trigger a browser download.
+            // Format: row 0 = hidden "#fields:" mapping row (for lossless re-import),
+            //         row 1 = human display headers,
+            //         row 2+ = data rows in the same column order.
             const exportCSV = () => {
                 if (!fields.length) return;
                 if (!items.length) { alert('No items to export.'); return; }
@@ -589,7 +621,10 @@
                 URL.revokeObjectURL(url);
             };
 
-            // Read a CSV file chosen by the user and insert each row as a new item
+            // Read a CSV file chosen by the user and insert each row as a new item.
+            // Supports two formats:
+            //   - Our own export (has a "#fields:" mapping row) — uses that row for column-to-field mapping.
+            //   - Plain CSV — matches headers against field_name OR display_name.
             const handleImport = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -685,7 +720,10 @@
                 setImportLoading(false);
             };
 
-            // Filter items to only those where any field value contains the search term
+            // ============================================================================
+            // 10. FILTER + SORT (runs every render)
+            // ============================================================================
+            // Keep items where ANY field value contains the search term (case-insensitive).
             const filtered = items.filter(item =>
                 !searchTerm || fields.some(f => {
                     const v = item[f.field_name];
@@ -693,7 +731,7 @@
                 })
             );
 
-            // Sort the filtered items by the chosen field, handling nulls and mixed number/string values
+            // Sort by the chosen field. Nulls go last. Numbers compared numerically; strings use localeCompare (numeric-aware).
             const displayItems = sortField
                 ? [...filtered].sort((a, b) => {
                     const aVal = a[sortField];
@@ -709,11 +747,17 @@
                 })
                 : filtered;
 
+            // ============================================================================
+            // 11. RENDER HELPERS
+            // ============================================================================
             if (!tableInfo) return <div className="center-msg">Loading...</div>;
 
+            // "Toners" → "Toner" for button labels like "+ Add Toner".
             const singularName = tableInfo.display_name.replace(/s$/i, '');
+            // Only show qty stats when this category has a quantity field.
             const hasQty = fields.find(f => f.field_name === 'quantity');
 
+            // Total / Total Qty / Low Stock summary — placed top or bottom per user pref.
             const statsBlock = (
                 <div className="stats-bar">
                     <div className="stat-block">
@@ -737,8 +781,12 @@
                 </div>
             );
 
+            // ============================================================================
+            // 12. RENDER
+            // ============================================================================
             return (
                 <div>
+                    {/* Page bar: category title + Export/Import CSV buttons */}
                     <div className="page-bar">
                         <h1 className="page-title">{tableInfo.icon || ''} {tableInfo.display_name}</h1>
                         <div className="page-actions">
@@ -767,6 +815,7 @@
                         </div>
                     </div>
 
+                    {/* Toolbar: search, sort field, sort direction, add/cancel */}
                     <div className="toolbar">
                         <input
                             type="text"
@@ -806,6 +855,7 @@
                         </button>
                     </div>
 
+                    {/* Add/Edit form — only rendered when adding or editing */}
                     {(showAddForm || editingId) && (
                         <div className="form-panel">
                             <h2>{editingId ? `Edit ${singularName}` : `New ${singularName}`}</h2>
@@ -836,8 +886,10 @@
                         </div>
                     )}
 
+                    {/* Stats bar (top) — only if user set stats_position = 'top' */}
                     {statsPosition === 'top' && !loading && displayItems.length > 0 && statsBlock}
 
+                    {/* Items list OR empty/loading message */}
                     {loading ? (
                         <div className="center-msg">Loading...</div>
                     ) : displayItems.length === 0 ? (
@@ -881,13 +933,20 @@
             );
         }
 
-        // Mount the React app once sidebar auth is confirmed
+        // ============================================================================
+        // 13. MOUNT
+        // Mount React as soon as auth is confirmed (either already done, or via event).
+        // ============================================================================
         function init() {
             ReactDOM.render(<InventoryApp />, document.getElementById('root'));
         }
         if (window.currentSession) init();
-        else window.addEventListener('sidebar-ready', init);
+        else window.addEventListener('auth-ready', init);
     </script>
+
+    <!-- ============================================================
+         7. AI CHAT BUBBLE
+         ============================================================ -->
     <script src="ai-assistant-v4.js"></script>
 </body>
 </html>

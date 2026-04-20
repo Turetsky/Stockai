@@ -1,0 +1,41 @@
+/* global.css — shared foundation for every page */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-size: var(--font-base, 16px);
+}
+
+:root {
+    --clr-start:          #667eea;
+    --clr-end:            #764ba2;
+    --clr-accent:         #667eea;
+    --clr-bg:             #eef0f6;
+    --clr-card:           #ffffff;
+    --clr-text-primary:   #1a1a2e;
+    --clr-text-secondary: #555;
+    --clr-text-label:     #888;
+    --card-radius:        12px;
+    --font-base:          15px;
+    --shadow-sm: 0 2px 8px rgba(102,126,234,0.10);
+    --shadow-md: 0 4px 16px rgba(102,126,234,0.14);
+    --shadow-lg: 0 8px 24px rgba(102,126,234,0.18);
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: var(--clr-bg);
+    color: var(--clr-text-primary);
+    font-size: var(--font-base);
+    line-height: 1.5;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+body.loaded {
+    opacity: 1;
+}

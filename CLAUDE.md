@@ -117,6 +117,10 @@ Theme changes from the AI flow through `themeNotifier` (set in `loadThemeFromSup
 
 Supabase URL and anon key are hardcoded in `web/sidebar.js`, `web/ai-assistant-v4.js`, and `app/lib/main.dart` (also `app/lib/services/api_service.dart` for the Edge Function URL) — update all when changing projects.
 
+## Shorthand / Abbreviations
+
+- **mp** = Mousepad (the text editor app on this WSL/Ubuntu device — e.g. "open X in mp" means launch it with `mousepad`)
+
 ## Chrome DevTools MCP (WSL2)
 
 Working — config and fix details are in memory (`project_chrome_devtools.md`).

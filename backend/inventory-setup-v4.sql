@@ -221,7 +221,6 @@ SET search_path = public
 AS $$
 BEGIN
     INSERT INTO ui_settings (key, user_id, value) VALUES
-        ('app_name',                  target_user_id, '📦 Inventory Manager'),
         ('primary_color_start',       target_user_id, '#667eea'),
         ('primary_color_end',         target_user_id, '#764ba2'),
         ('header_text_color',         target_user_id, '#ffffff'),

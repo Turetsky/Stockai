@@ -25,12 +25,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
   @override
   void initState() {
     super.initState();
-    _reload();
+    _dataFuture = _loadData();
   }
 
   void _reload() {
-    setState(() {
-      _dataFuture = _loadData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() { _dataFuture = _loadData(); });
     });
   }
 
@@ -44,7 +44,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
     const systemCols = {'id', 'user_id', 'created_at', 'updated_at'};
     return fields
         .where((f) => !systemCols.contains(f['field_name'] as String? ?? ''))
-        .toList();
+        .toList()
+      ..sort((a, b) => ((a['sort_order'] as num?) ?? 0)
+          .compareTo((b['sort_order'] as num?) ?? 0));
   }
 
   // Field 1 (index 0) is always the item title.
@@ -215,22 +217,28 @@ class _CategoryScreenState extends State<CategoryScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => _ItemForm(
-        fields: userFields,
-        existing: existing,
-        isEdit: existing != null,
-        onSave: (data) async {
-          if (existing != null) data['id'] = existing['id'];
-          await _supabaseService.upsertItem(_tableName, data);
-          if (mounted) _reload();
-        },
-        onManageFields: () => Navigator.pop(ctx, true),
+      builder: (ctx) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+        ),
+        child: _ItemForm(
+          fields: userFields,
+          existing: existing,
+          isEdit: existing != null,
+          onSave: (data) async {
+            if (existing != null) data['id'] = existing['id'];
+            await _supabaseService.upsertItem(_tableName, data);
+          },
+          onManageFields: () => Navigator.pop(ctx, true),
+        ),
       ),
     );
 
+    // Sheet is fully closed — safe to reload now
+    if (mounted && goManage != true) _reload();
+
     if (goManage == true) {
       await _showManageSheet(fields);
-      _reload();
     }
   }
 
@@ -242,12 +250,17 @@ class _CategoryScreenState extends State<CategoryScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => _ManageCategorySheet(
-        category: widget.category,
-        fields: _userFields(fields),
-        onChanged: _reload,
+      builder: (ctx) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+        ),
+        child: _ManageCategorySheet(
+          category: widget.category,
+          fields: _userFields(fields),
+        ),
       ),
     );
+    if (mounted) _reload();
   }
 
   Future<void> _exportCsv(
@@ -551,12 +564,10 @@ class _CategoryData {
 class _ManageCategorySheet extends StatefulWidget {
   final Map<String, dynamic> category;
   final List<Map<String, dynamic>> fields;
-  final VoidCallback onChanged;
 
   const _ManageCategorySheet({
     required this.category,
     required this.fields,
-    required this.onChanged,
   });
 
   @override
@@ -579,7 +590,9 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
   @override
   void initState() {
     super.initState();
-    _fields = List.from(widget.fields);
+    _fields = List.from(widget.fields)
+      ..sort((a, b) => ((a['sort_order'] as num?) ?? 0)
+          .compareTo((b['sort_order'] as num?) ?? 0));
     _categoryController =
         TextEditingController(text: widget.category['display_name'] ?? _tableName);
   }
@@ -599,7 +612,6 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
     setState(() { _editingCategory = false; _busyCategory = true; });
     try {
       await _supabaseService.renameCategory(_tableName, newName);
-      widget.onChanged();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -630,21 +642,24 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
       } else {
         await _supabaseService.renameFieldDisplay(_tableName, fieldName, resolved);
       }
-      widget.onChanged();
-      if (mounted && idx >= 0) {
-        setState(() => _fields[idx] = {
-          ..._fields[idx],
-          'display_name': resolved,
-          if (newType != null) 'field_type': newType,
+      if (mounted) {
+        setState(() {
+          if (idx >= 0) {
+            _fields[idx] = {
+              ..._fields[idx],
+              'display_name': resolved,
+              if (newType != null) 'field_type': newType,
+            };
+          }
+          _busyField = null;
         });
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _busyField = null);
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
-    } finally {
-      if (mounted) setState(() => _busyField = null);
     }
   }
 
@@ -676,7 +691,7 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
               if (!isAnchor) ...[
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  initialValue: selectedType,
+                  value: selectedType,
                   decoration: const InputDecoration(
                     labelText: 'Type',
                     border: OutlineInputBorder(),
@@ -708,6 +723,9 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
     );
     nameCtrl.dispose();
     if (result == null) return;
+    // Wait for the dialog exit animation to fully finish before updating state.
+    await Future.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
     await _doFieldRename(
         fn, result['name']!, isAnchor ? null : result['type']);
   }
@@ -736,11 +754,12 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
       ),
     );
     if (confirmed != true) return;
+    await Future.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
 
     setState(() => _busyField = fieldName);
     try {
       await _apiService.removeField(_tableName, fieldName);
-      widget.onChanged();
       if (mounted) {
         setState(() =>
             _fields.removeWhere((f) => f['field_name'] == fieldName));
@@ -778,7 +797,7 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: selectedType,
+                value: selectedType,
                 decoration: const InputDecoration(
                   labelText: 'Type',
                   border: OutlineInputBorder(),
@@ -796,15 +815,11 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
           ),
           actions: [
             TextButton(
-                onPressed: () {
-                  nameController.dispose();
-                  Navigator.pop(ctx);
-                },
+                onPressed: () => Navigator.pop(ctx),
                 child: const Text('Cancel')),
             FilledButton(
               onPressed: () {
                 final name = nameController.text.trim();
-                nameController.dispose();
                 if (name.isEmpty) return;
                 Navigator.pop(ctx, {'name': name, 'type': selectedType});
               },
@@ -814,8 +829,10 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
         ),
       ),
     );
-
+    nameController.dispose();
     if (result == null) return;
+    await Future.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
     final displayName = result['name']!;
     final fieldType = result['type']!;
     final fieldName = displayName
@@ -827,7 +844,6 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
     setState(() => _busyField = '__adding__');
     try {
       await _apiService.addField(_tableName, fieldName, displayName, fieldType);
-      widget.onChanged();
       if (mounted) {
         setState(() => _fields.add({
           'field_name': fieldName,
@@ -865,10 +881,9 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
       {required int index}) {
     final theme = Theme.of(context);
     final fn = field['field_name'] as String;
-    final ft = field['field_type'] as String? ?? 'text';
     final isBusy = _busyField == fn;
-    final roleLabel = index == 0 ? 'Identity' : 'Count';
-    final dn = index == 0 ? 'Item Name' : 'Quantity';
+    final roleLabel = index == 0 ? 'Item Name' : 'Quantity';
+    final dn = field['display_name'] as String? ?? field['field_name'] as String;
 
     return Column(
       children: [
@@ -895,10 +910,6 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
                 ),
               ),
             ],
-          ),
-          subtitle: Text(
-            ft,
-            style: TextStyle(fontSize: 12, color: theme.colorScheme.outline),
           ),
           trailing: isBusy
               ? const SizedBox(
@@ -993,7 +1004,10 @@ class _ManageCategorySheetState extends State<_ManageCategorySheet> {
             ),
           ),
         ),
-        Flexible(
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.82,
+          ),
           child: SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(
                 16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 24),
@@ -1171,29 +1185,73 @@ class _ItemFormState extends State<_ItemForm> {
 
   Future<void> _submit() async {
     if (!mounted) return;
+    // Validate mandatory anchor fields
+    if (widget.fields.isNotEmpty) {
+      final nameVal = _controllers[widget.fields[0]['field_name']]?.text.trim() ?? '';
+      if (nameVal.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Name is required.')),
+        );
+        return;
+      }
+    }
+    if (widget.fields.length > 1) {
+      final qtyVal = _controllers[widget.fields[1]['field_name']]?.text.trim() ?? '';
+      if (qtyVal.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Quantity is required.')),
+        );
+        return;
+      }
+    }
+    // Validate numeric fields before hitting the DB
+    for (final f in widget.fields) {
+      final ft = f['field_type'] as String? ?? 'text';
+      if (ft == 'number' || ft == 'integer' || ft == 'float') {
+        final val = _controllers[f['field_name']]?.text.trim() ?? '';
+        if (val.isNotEmpty && num.tryParse(val) == null) {
+          final dn = f['display_name'] as String? ?? f['field_name'] as String;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('"$dn" must be a number.')),
+          );
+          return;
+        }
+      }
+    }
     setState(() => _saving = true);
     try {
       final data = <String, dynamic>{
         for (final f in widget.fields)
-          f['field_name'] as String:
-              _controllers[f['field_name']]?.text.trim() ?? '',
+          f['field_name'] as String: () {
+            final val = _controllers[f['field_name']]?.text.trim() ?? '';
+            final ft = f['field_type'] as String? ?? 'text';
+            if (val.isEmpty && (ft == 'number' || ft == 'integer' || ft == 'float')) {
+              return null;
+            }
+            return val.isEmpty ? null : val;
+          }(),
       };
       await widget.onSave(data);
       if (mounted) Navigator.pop(context);
+      // Widget is now closing — don't setState again
+      return;
     } catch (e) {
       if (mounted) {
+        setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
         );
       }
-    } finally {
-      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
+      ),
+      child: SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         16,
         16,
@@ -1227,20 +1285,16 @@ class _ItemFormState extends State<_ItemForm> {
             final fieldName = f['field_name'] as String;
             final displayName = f['display_name'] as String? ?? fieldName;
             final fieldType = f['field_type'] as String? ?? 'text';
-            final isAnchor = idx < 2;
-            final isNumber = fieldType == 'number' ||
-                fieldType == 'integer' ||
-                fieldType == 'float';
+            final isRequired = idx == 0 || idx == 1;
+            final label = isRequired ? '$displayName *' : displayName;
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: TextField(
                 controller: _controllers[fieldName],
-                keyboardType: isNumber
-                    ? const TextInputType.numberWithOptions(decimal: true)
-                    : TextInputType.text,
+                keyboardType: TextInputType.text,
                 maxLines: fieldType == 'textarea' ? 3 : 1,
                 decoration: InputDecoration(
-                  labelText: isAnchor ? '$displayName *' : displayName,
+                  labelText: label,
                   border: const OutlineInputBorder(),
                 ),
               ),
@@ -1260,6 +1314,7 @@ class _ItemFormState extends State<_ItemForm> {
           ),
         ],
       ),
+    ),
     );
   }
 }

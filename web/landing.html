@@ -1,20 +1,27 @@
+<!-- ============================================================
+     1. SETUP — tells the browser what this file is and how to read it
+     ============================================================ -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StockAI - Login</title>
+
+    <!-- ============================================================
+         2. HEAD DEPENDENCIES — config + Supabase library + shared CSS
+         must load before anything else touches window.supabase or relies on global styles
+         ============================================================ -->
     <script src="/config.js"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+    <link rel="stylesheet" href="/global.css">
 
+    <!-- ============================================================
+         3. CSS STYLES — landing-page-specific styling
+         (login card, tab switcher, form fields, buttons)
+         ============================================================ -->
+    <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
@@ -256,7 +263,14 @@
         }
     </style>
 </head>
-<body>
+
+<!-- ============================================================
+     4. BODY — the login / signup / password-reset UI
+     single card with tab switcher for Sign In vs Sign Up
+     `loaded` class is set inline: landing has no async setup to hide,
+     so it can be visible immediately (no fade-in gate needed).
+     ============================================================ -->
+<body class="loaded">
     <div class="container">
         <div class="card">
             <div class="header">
@@ -306,6 +320,20 @@
                         <a id="back-to-login-link">Back to login</a>
                     </div>
                 </div>
+
+                <div id="new-password-form" style="display: none;">
+                    <h3 style="margin-bottom: 16px; font-size: 18px;">Set New Password</h3>
+                    <div id="new-password-message"></div>
+                    <div class="form-group">
+                        <label for="new-password">New Password</label>
+                        <input type="password" id="new-password" placeholder="••••••••" minlength="6" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-password-confirm">Confirm Password</label>
+                        <input type="password" id="new-password-confirm" placeholder="••••••••" minlength="6" required>
+                    </div>
+                    <button type="button" class="submit-button" id="new-password-button">Update Password</button>
+                </div>
             </div>
 
             <!-- Sign Up Tab -->
@@ -334,10 +362,14 @@
         </div>
     </div>
 
+    <!-- ============================================================
+         5. AUTH SCRIPT — Supabase login / signup / password-reset logic
+         tab switching, form handlers, session check on page load
+         ============================================================ -->
     <script>
         // Initialize Supabase
-        const SUPABASE_URL = window.SUPABASE_URL || 'https://masngvxdbxqrrreszjxv.supabase.co';
-        const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hc25ndnhkYnhxcnJyZXN6anh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3Njc5MzIsImV4cCI6MjA4NjM0MzkzMn0.QmHFsyeMUkwE7cW6N88k2eSk2BpyXit2UxVlqXxl4zE';
+        const SUPABASE_URL = window.SUPABASE_URL;
+        const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
 
         const { createClient } = window.supabase;
         const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -345,6 +377,7 @@
         // Check if already logged in
         async function checkExistingSession() {
             try {
+                if (window.location.hash.includes('type=recovery')) return;
                 const { data } = await db.auth.getSession();
                 if (data.session) {
                     window.location.href = 'index.html';
@@ -511,7 +544,9 @@
             button.textContent = 'Sending...';
 
             try {
-                const { error } = await db.auth.resetPasswordForEmail(email);
+                const { error } = await db.auth.resetPasswordForEmail(email, {
+                        redirectTo: window.location.origin + '/landing.html'
+                    });
 
                 if (error) {
                     showMessage('reset-message', error.message, 'error');
@@ -524,6 +559,56 @@
             } finally {
                 button.disabled = false;
                 button.textContent = 'Send Reset Link';
+            }
+        });
+
+        function showRecoveryForm() {
+            document.querySelector('.auth-tabs').style.display = 'none';
+            document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+            document.getElementById('new-password-form').style.display = 'block';
+        }
+
+        // Handle password recovery link (user arrives from reset email)
+        if (window.location.hash.includes('type=recovery')) {
+            showRecoveryForm();
+        }
+
+        db.auth.onAuthStateChange(async (event, session) => {
+            if (event === 'PASSWORD_RECOVERY') {
+                showRecoveryForm();
+            }
+        });
+
+        document.getElementById('new-password-button').addEventListener('click', async () => {
+            const password = document.getElementById('new-password').value;
+            const confirm = document.getElementById('new-password-confirm').value;
+            const button = document.getElementById('new-password-button');
+
+            if (password.length < 6) {
+                showMessage('new-password-message', 'Password must be at least 6 characters.', 'error');
+                return;
+            }
+            if (password !== confirm) {
+                showMessage('new-password-message', 'Passwords do not match.', 'error');
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Updating...';
+
+            try {
+                const { error } = await db.auth.updateUser({ password });
+                if (error) {
+                    showMessage('new-password-message', error.message, 'error');
+                } else {
+                    showMessage('new-password-message', 'Password updated! Redirecting...', 'success');
+                    setTimeout(() => { window.location.href = 'index.html'; }, 1500);
+                }
+            } catch (err) {
+                showMessage('new-password-message', 'An unexpected error occurred.', 'error');
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Update Password';
             }
         });
 

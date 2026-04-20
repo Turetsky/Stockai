@@ -1,5 +1,5 @@
 ================================================================================
- STOCKAI — PROJECT RECAP (v4.3)
+ STOCKAI — PROJECT RECAP (v4.5)
 ================================================================================
 
 OVERVIEW:
@@ -298,6 +298,69 @@ TECH STACK:
     - Web: Netlify https://cchi.netlify.app (8 files uploaded)
     - Supabase Edge Function: smart-api v40 (ACTIVE)
     - GitHub: pushed to master
+
+================================================================================
+ RECENT CHANGES (2026-04-16) — v4.5
+================================================================================
+
+  FLUTTER — "New Category" button now bypasses AI (category creation reliability):
+    - Root cause: AI (claude-haiku-4-5-20251001) was creating categories with only
+      one field (quantity) and no name field, or putting a number field at position 0.
+      The "Add Category" button in the chat drawer and settings Data tab sent a natural
+      language prompt to the AI, which would then call create_category unreliably.
+    - Fix: ApiService.createCategory(displayName, icon) added — calls create_category
+      via direct tool_call mode with hardcoded fields:
+          fields[0]: { field_name: "name", display_name: "Name", field_type: "text", required: true }
+          fields[1]: { field_name: "quantity", display_name: "Quantity", field_type: "number" }
+      table_name derived from displayName (lowercase, spaces→underscores, strip non-alphanumeric).
+    - Both call sites updated:
+        chat_screen.dart _NewCategorySheet.onCreated → _apiService.createCategory()
+        settings_screen.dart _DataCategorySheet.onCreated → _apiService.createCategory()
+    - AI chat path unchanged: typing "create a printers category with brand and model"
+      still goes through the AI tool-use loop. AI can still customise field display names
+      (e.g. "Printer Model") and add extra fields. Backend enforcement is the safety net.
+
+  BACKEND — create_category enforcement (supabase/functions/smart-api/index.ts):
+    - Backend now auto-corrects malformed field arrays before saving:
+        If fields[0].field_type !== 'text' → prepend { name, Name, text, required:true }
+        If fields.length < 2 → append { quantity, Quantity, number }
+    - Tool description updated with concrete field examples and MANDATORY warning.
+    - System prompt CATEGORY CREATION RULES section added with ⚠️ MANDATORY header,
+      explicit field structure with examples, "A category with only one field is BROKEN".
+    - Quick-reference create_category line updated: now shows both required fields.
+    - CRITICAL section clarified: applies to data insertion only, not category creation.
+    - NOTE: All previous edits were accidentally made to backend/smart-api-v4.ts (not
+      deployed). The deployed file is supabase/functions/smart-api/index.ts — fixed.
+
+  FLUTTER — category_screen.dart stability fixes:
+    - Item form field labels: now use actual display_name (e.g. "Printer Model *")
+      instead of hardcoded "Name *" / "Quantity *". Required fields still marked with *.
+    - Overflow crash fixed: all showModalBottomSheet calls now wrap content in
+      ConstrainedBox(maxHeight: 90% screen height) at the call site. Also added
+      ConstrainedBox inside _ItemForm itself. Fixes "RenderFlex overflowed by 99231px"
+      on Flutter web, especially at high browser zoom levels.
+    - _submit() finally block removed: no longer calls setState after Navigator.pop.
+      Prevented "Looking up a deactivated widget's ancestor" and cascade errors.
+      On success: pop + return. On error: setState(saving=false) + snackbar.
+    - _reload() now uses addPostFrameCallback: setState deferred to after current frame,
+      preventing "Tried to build dirty widget in wrong build scope" assertion.
+    - initState now sets _dataFuture = _loadData() directly (not via _reload) to
+      prevent LateInitializationError on first frame before callback fires.
+
+  FLUTTER — chat_screen.dart: categories auto-refresh after every AI response:
+    - _sendMessage() now calls _loadCategories() alongside loadThemeFromSupabase()
+      after every AI response. Previously the drawer category list only updated when
+      the user manually opened/closed the drawer after an AI create_category call.
+
+  DATABASE — test category cleanup + sort order fixes:
+    - Deleted: test_category_1, test_category_2, test_category_3 (tables + metadata)
+    - Fixed sort_orders on broken AI-created categories: name field set to sort_order=0,
+      quantity to sort_order=1 so card title and stock badge render correctly.
+    - Added missing 'name' text field to: desktops, phone, test, test_2 categories.
+
+  DEPLOYMENTS:
+    - Supabase Edge Function: smart-api redeployed (create_category enforcement + prompts)
+    - Flutter APK v1.1.2 (4), 55.4MB — Firebase App Distribution, tester: Yjturetsky@gmail.com
 
 ================================================================================
  RECENT CHANGES (2026-04-14, session 2) — v4.3
@@ -767,5 +830,338 @@ TECH STACK:
   - Image uploads for items
   - Barcode scanner integration
   - ~~Remove run_sql tool from AI access~~ DONE (see Recent Changes)
+
+
+INTERVIEW PREP CLEANUP (2026-04-20)
+-----------------------------------
+Codebase pass ahead of a job interview — priority was clarity, removing
+redundant/dead code, and consolidating duplication. Every change below
+is web-only; backend (Edge Function + SQL) and Flutter were left alone.
+
+  1. Supabase credentials — single source of truth
+     Previously, each file that needed the URL/key had a
+     `window.SUPABASE_URL || 'https://...hardcoded...'` fallback. The
+     fallback was a copy-paste of config.js's value, so "change project =
+     edit N files." Stripped the fallbacks from:
+       - web/landing.html   (was line ~353)
+       - web/index.html     (was line ~688)
+       - web/inventory.html (was line ~319)
+       - web/settings.html  (was line ~370)
+       - web/auth.js        (was lines 17-18)
+       - web/sidebar.js     (was line ~971)
+       - web/ai-assistant-v4.js (was line 15)
+     Now each reads strictly from window.SUPABASE_URL /
+     window.SUPABASE_ANON_KEY set by config.js. One place to change.
+
+  2. Fixed missing config.js in about.html
+     about.html was loading auth.js + sidebar.js without loading
+     config.js first — the fallbacks above were quietly masking this.
+     Added <script src="/config.js"></script> before the supabase lib.
+
+  3. Removed dead `if (!window.db)` guard in auth.js
+     The guard could never fire — auth.js is the only place that sets
+     window.db, and it only runs once per page. Collapsed 3 lines to 1.
+
+  4. Removed web-side app_name feature from sidebar.js
+     The "user can rename the app" feature didn't make sense in a
+     multi-tenant product. sidebar.js no longer reads theme.app_name
+     or extracts the legacy 📦 emoji — always renders "StockAI" + the
+     SVG cube logo. Related backend/Flutter cleanup is below in
+     CLEANUP DEBT.
+
+  5. Switched `auth-ready` from event-only to Promise-based
+     auth.js now exposes `window.authReady` as a Promise that only
+     resolves on a successful auth. The 'auth-ready' CustomEvent is
+     still dispatched for old-style listeners.
+     Before: sidebar.js had a 3-line `if (!window.authReady) { await
+     new Promise(...) }` gate.
+     After:  `await window.authReady;` — one line, cleaner semantics.
+     On the redirect path, the promise stays pending forever (the page
+     is unloading anyway), so no explicit "if no user, bail" guard is
+     needed in consumers.
+
+  6. Extracted shared CSS to web/global.css (NEW FILE)
+     Previously the body fade-in, CSS variable defaults, html
+     font-size, and universal reset were duplicated across
+     index/inventory/settings/landing/about.html AND sidebar.js — six
+     copies of the same thing.
+     Created web/global.css with the canonical shared rules. Each HTML
+     now loads it via <link rel="stylesheet" href="/global.css"> and
+     keeps ONLY its page-specific overrides inline. sidebar.js's
+     injected <style> block also had its global chunks (body, html,
+     body.loaded, --font-base) removed — only sidebar-scoped rules
+     remain.
+     Drift note: settings.html and about.html have --clr-bg: #f5f5f5
+     (vs. #eef0f6 on dashboard/inventory). Left in place as inline
+     overrides; worth unifying later.
+     Follow-up: also removed redundant `<body style="opacity:0;
+     transition:opacity 0.15s">` inline attributes from index.html,
+     settings.html, and inventory.html — global.css now owns this.
+
+  7. Updated sidebar.js file header
+     Now states explicitly that sidebar.js owns both the desktop
+     sidebar and the mobile topbar (hamburger + title), since they
+     share state and wiring.
+
+  8. Tightened helper function docstrings in sidebar.js
+     The single-line /** */ comments above each helper now describe
+     what the function returns AND where it's used (e.g., "used by the
+     mobile topbar", "used for the avatar circle"). Old version was
+     vague ("Get initials from a name").
+
+  9. Reorganized sidebar.js section numbering
+     Before: sections 1, 2, 3, 6, 7, 8, 9, 10, 11, 11, (sections 4/5
+     had been deleted in earlier refactors, and a duplicate 11 had
+     snuck in at the bottom).
+     Also: "7. HELPER FUNCTIONS" lumped together the three small
+     helpers (getInitials, getCurrentPageName, isNavItemActive — each
+     under 20 lines) with buildSidebar (118 lines). buildSidebar isn't
+     a helper, it's the main builder.
+     After: clean 1-11 with no gaps or dupes, AND reordered so every
+     section comes after everything it depends on (no forward refs):
+        1. APPLY THEME
+        2. WAIT FOR AUTH
+        3. LOAD CATEGORIES
+        4. INJECT STYLES
+        5. HELPER FUNCTIONS         (getInitials, getCurrentPageName,
+                                     isNavItemActive)
+        6. BUILDERS                 (buildSidebar, buildMobileTopbar,
+                                     buildOverlay)
+        7. GLOBAL FUNCTIONS         (window.toggleSidebar, sidebarLogout,
+                                     refreshSidebarCategories)
+        8. FEEDBACK MODAL FUNCTIONS (openFeedbackModal, closeFeedbackModal,
+                                     submitFeedback)
+        9. INJECT SIDEBAR INTO DOM  (uses everything above)
+       10. SHOW PAGE
+       11. DISPATCH READY EVENT
+     Before the reorder, Section 7 (inject) came before Sections 8 and 9
+     (definitions) — it worked only thanks to function hoisting. Now
+     reading top-to-bottom follows the actual dependency order.
+
+ 10. auth.js — header comment rewritten for accuracy
+     Old comment said "Must be loaded before sidebar.js on every page."
+     That was out of date — multiple consumers now wait on auth (sidebar.js,
+     ai-assistant-v4.js, inline scripts in each HTML). The new comment
+     describes the actual load-order contract and the `window.authReady`
+     Promise semantics (resolves only on success; stays pending on the
+     redirect path so consumers hang harmlessly while the page unloads).
+     File structure (5 numbered sections) was already clean — no code move.
+
+ 11. Extracted shared nav-build logic in sidebar.js → buildNav()
+     The nav (Dashboard + categories + Settings + Feedback + About) was
+     constructed in TWO places:
+       - buildSidebar()               — initial render on page load
+       - refreshSidebarCategories()   — rebuild after a category is
+                                        created/renamed/deleted
+     ~100 lines of the same code, with small drift (the refresh path
+     was missing the About link that buildSidebar had).
+     Extracted into a new helper `buildNav()` in section 6 (BUILDERS).
+     Both callers now do `buildNav()` instead of constructing inline.
+     Net: sidebar.js dropped from ~1029 to ~926 lines, and the missing
+     About link is now present after a refresh.
+
+ 12. Renamed jargon-heavy section headers in sidebar.js
+     "INJECT STYLES"          → "ADD SIDEBAR STYLES"
+     "INJECT SIDEBAR INTO DOM" → "ADD SIDEBAR TO PAGE"
+     "DISPATCH READY EVENT"    → "SIGNAL SIDEBAR IS READY"
+     "Inject" and "dispatch" are accurate terms but read as jargon to
+     anyone not already steeped in DOM-speak. The new names describe
+     what the section does in plain terms.
+
+ 13. Extracted shared display-name fallback → window.displayNameFrom
+     The fallback `email.split('@')[0] || 'User'` pattern was inline in
+     two places: auth.js (when fabricating a profile after a failed
+     fetch) and sidebar.js (when rendering the footer displayName).
+     Extracted as a one-liner in auth.js:
+       window.displayNameFrom = (email) => email?.split('@')[0] || 'User';
+     Both consumers now call it. Future changes to the fallback logic
+     (e.g. capitalize, strip numbers) happen in one place.
+
+ 14. Unified the "something changed" event system → data-changed
+     Before the cleanup there were THREE different refresh triggers,
+     each with their own listeners (or no listeners at all):
+       - `window.refreshSidebarCategories()` direct call — fired from
+          settings.html on category delete. sidebar.js only.
+       - `categories-updated` CustomEvent — fired from index.html after
+          a new category was created. **Nobody listened for it.**
+       - `ai-refresh` CustomEvent — fired from ai-assistant-v4.js after
+          any AI tool call. Listened by index.html and inventory.html,
+          but NOT by sidebar.js (so AI-driven category changes never
+          updated the nav).
+     The gaps meant creating a category from the dashboard, or letting
+     the AI create one via chat, required a full page reload before
+     the sidebar nav showed it.
+     After: one event — `data-changed` — fired from every mutation
+     site (settings.html, index.html, ai-assistant-v4.js) and listened
+     by everyone that renders changeable data (sidebar.js, index.html,
+     inventory.html). Bonus: ai-assistant-v4.js's triggerRefresh went
+     from 8 lines (event + 2 direct function calls to specific pages)
+     down to 3 — the event reaches every listener.
+
+ 15. Extracted shared category-load helper → loadCategories()
+     Section 3 (initial page load) and refreshSidebarCategories (later
+     refresh) had near-identical DB queries for this user's
+     categories. Extracted into `loadCategories()` in Section 5.
+     Both callers now just do `await loadCategories();`.
+     Section 3 collapsed from 12 lines to 4. refreshSidebarCategories
+     collapsed from 21 lines to 12. Single source of truth for "how
+     we fetch categories."
+
+ 16. Section 10 of sidebar.js renamed "SHOW PAGE (auth complete)"
+     → "SHOW PAGE"
+     The "(auth complete)" parenthetical was a stale note from when
+     sidebar.js handled auth itself. Auth was split into auth.js (see
+     entry 5), so the note no longer tells the truth about this file.
+     Also removed the redundant `document.body.style.opacity = '1'`
+     line — it was a fallback for when body had inline
+     `style="opacity:0"`, which we stripped earlier when global.css
+     took over the fade-in. Section 10 is now a single line:
+       document.body.classList.add('loaded');
+
+ 17. Numbered index.html's banner comments for parity with sidebar.js
+     Before: banner comments were named (SETUP, INSTANT THEME, CSS
+     STYLES, BODY, SCRIPT LOADING ORDER, DASHBOARD SCRIPT, AI CHAT
+     BUBBLE) but unnumbered. After: numbered 1-7 in load order, same
+     convention as sidebar.js's internal sections. Makes it easier to
+     reference "section N of index.html" in discussion.
+
+ 18. Added numbered banner comments to landing.html
+     Landing had no section banners previously — just opens straight
+     into <!DOCTYPE html>, then head/body with no signposts. Added
+     the same numbered-banner convention index.html uses:
+        1. SETUP              (DOCTYPE + head meta)
+        2. HEAD DEPENDENCIES  (config.js + Supabase lib + global.css)
+        3. CSS STYLES         (landing-specific <style> block)
+        4. BODY               (login / signup / reset UI)
+        5. AUTH SCRIPT        (login, signup, password reset handlers)
+
+ 19. Fixed invisible-landing-page bug
+     Discovered while walking through landing.html's flow. After entry
+     6 (body fade-in moved to global.css) and the later cleanup that
+     removed the inline `<body style="opacity:0">` from HTML files,
+     landing had no way to reveal itself: global.css sets
+     `body { opacity: 0 }` and `body.loaded { opacity: 1 }`, but
+     landing doesn't load sidebar.js (which is what adds the `loaded`
+     class on other pages), and nothing in landing's own script adds
+     it either. Result: the login page was rendering at opacity 0
+     after the cleanup — completely invisible.
+     Fix: set `<body class="loaded">` inline on landing.html. Landing
+     has no async setup to hide (unlike the post-auth pages), so it
+     can be visible immediately — no fade-in gate needed.
+
+ 20. Numbered + cleaned up ai-assistant-v4.js
+     a) Banner style: the file had dash-box mini-sections
+        (`/* ── Name ──── */`). Converted to the numbered-banner style
+        used by sidebar.js:
+          1. SETUP + STATE
+          2. AUTH HELPERS
+          3. CONTEXT HELPERS
+          4. REFRESH HOOKS
+          5. WIDGET CREATION
+          6. MESSAGE RENDERING
+          7. SEND MESSAGE
+          8. PUBLIC API
+          9. STYLES
+         10. INIT
+     b) Removed stale "KEY CHANGE vs v3" docstring on getAuthHeaders.
+        v3 was replaced long ago; the comparison note is dead weight.
+     c) Simplified init from 11 lines to 4. Before it tried to init
+        three ways (immediate, DOMContentLoaded, sidebar-ready); the
+        first two always failed the auth check and returned without
+        doing anything, because auth isn't ready that early. Only
+        sidebar-ready actually created the widget. Now only sidebar-
+        ready is used.
+     d) Simplified reply extraction in sendMessage from 8 lines to 1.
+        It had three fallback branches trying data.content[].text,
+        then data.message, then data.text. But the Edge Function
+        always returns `data.message` in both AI-mode and direct
+        tool_call mode responses — so only that one line is needed:
+          const reply = data.message || '(No response)';
+        The other branches were defending against a shape the backend
+        never actually returns.
+     File total: 569 → 547 lines.
+
+ 21. Removed the dead `ai_panel_size` / setAIPanelSize feature
+     Discovered while walking through Section 8 of ai-assistant-v4.js:
+     the `window.setAIPanelSize` function was defined and on window,
+     and the backend accepted `ai_panel_size` as a `set_ui_setting`
+     parameter — but nothing ever called setAIPanelSize, and nothing
+     read the setting back from the DB on page load. Half-built
+     feature. User saying "make the chat bigger" would silently save
+     to the DB but the panel never resized.
+     Stripped:
+       - web/ai-assistant-v4.js — removed AI_PANEL_SIZES lookup,
+         window.setAIPanelSize function, CSS variables for panel
+         dims, and the old Section 8 "PUBLIC API". Renumbered
+         Section 10 INIT → 9. File now 547 → 526 lines.
+       - backend/smart-api-v4.ts — removed ai_panel_size from the AI
+         tool description (line 257) and the allowed set_ui_setting
+         columns (line 926).
+       - web/ai-assistant-v4.js header comment — stripped the stale
+         "changes from v3" history; replaced with a plain description
+         of current behavior.
+     Still in the duplicate Edge Function at
+     supabase/functions/smart-api/index.ts (see CLEANUP DEBT below) —
+     strip it there when the duplicate is resolved.
+
+ 22. Backend quick-pass — smart-api-v4.ts + SQL seed
+     a) Added numbered banners to backend/smart-api-v4.ts:
+          1. TOOL DEFINITIONS
+          2. HELPERS
+          3. TOOL EXECUTOR
+          4. MAIN REQUEST HANDLER
+        Same convention as the web files. Sub-section dash-headers
+        inside sections 3 and 4 (READ / CATEGORIES / FIELDS / ITEMS /
+        UI SETTINGS, and Token-extraction / clients / validation /
+        etc.) left in place as useful landmarks.
+     b) Stripped the last `app_name` references (Scope B completion):
+          - backend/smart-api-v4.ts: removed from AI tool description
+            (line 204) AND from allowed set_ui_setting columns
+            (line 920).
+          - backend/inventory-setup-v4.sql: removed the INSERT row
+            that seeded '📦 Inventory Manager' for every new user.
+        The duplicate Edge Function at supabase/functions/smart-api/
+        index.ts still contains both references — that duplicate is
+        Scope B's other shoe, to be resolved when we pick a canonical
+        file.
+
+ 23. config.js left as two lines (no diagnostic check)
+     Briefly added a "credentials missing" console.error guard, then
+     realized the two lines above it are hardcoded string literals —
+     the guard could never fire. Stripped back to the minimal form.
+
+CLEANUP DEBT (2026-04-20)
+-------------------------
+TODO: Finish removing the `app_name` customization feature (Scope B + C).
+  The web side was stripped — sidebar.js no longer reads `theme.app_name`
+  and always renders "StockAI" + the default SVG logo. The feature is still
+  alive in other places:
+
+    - backend/inventory-setup-v4.sql:224
+        Still seeds every new user's ui_settings with
+        '📦 Inventory Manager' — remove this INSERT row.
+
+    - backend/smart-api-v4.ts:205, 922
+        The AI tool description still lists `app_name` as a settable key,
+        and line 922 includes it in the allowed set_ui_setting columns.
+        The AI can still "succeed" at setting it — it just does nothing
+        visible. Remove from both places and redeploy the Edge Function.
+
+    - supabase/functions/smart-api/index.ts
+        Duplicate of the Edge Function. Either this or backend/smart-api-v4.ts
+        is stale. Decide which is canonical and delete the other.
+
+    - app/lib/screens/chat_screen.dart:263-275
+        Flutter still reads app_name + extracts emoji. Replace with the
+        hardcoded "StockAI" title and the app's SVG/branded logo widget.
+
+  Reason to finish this: currently a user can "rename the app" through
+  the AI chat, and the write silently succeeds but nothing renders it.
+  That's a hidden no-op — worse than a clear error. Finishing Scope B/C
+  removes the feature surface entirely.
+
+  Also on the debt list:
+    - Duplicate Edge Function path (backend/ vs supabase/functions/) —
+      resolve.
 
 ================================================================================

@@ -142,10 +142,11 @@ class _ChatScreenState extends State<ChatScreen> {
           await _player.play(BytesSource(audio));
         } catch (_) {}
       }
-      // Reload theme + app name in case the AI changed them via set_ui_setting
+      // Reload categories, theme + app name in case the AI changed them
       await loadThemeFromSupabase();
       if (mounted) {
         setState(() {
+          _loadCategories();
           _uiSettingsFuture = _supabaseService.getUiSettings();
         });
       }
@@ -243,9 +244,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             builder: (_) => _NewCategorySheet(
               onCreated: (name, icon) async {
-                final msg = 'Create a new category called "$name" with the icon "$icon"';
-                _messageController.text = msg;
-                await _sendMessage();
+                await _apiService.createCategory(name, icon);
                 setState(() => _loadCategories());
               },
             ),

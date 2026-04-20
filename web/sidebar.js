@@ -1,7 +1,10 @@
 /**
  * sidebar.js
- * Builds and injects the sidebar UI into every page.
- * Depends on auth.js running first — waits for the 'auth-ready' event.
+ * Builds and injects the navigation UI on every page.
+ * Owns two components that share state:
+ *   - The desktop sidebar (left rail with categories + profile).
+ *   - The mobile topbar (56px header with hamburger that reveals the sidebar).
+ * Depends on auth.js — awaits `window.authReady` before rendering.
  */
 (async function initializeSidebar() {
 
@@ -38,74 +41,24 @@
         root.style.setProperty(cssVar, theme[key]);
       }
     }
-    // Extract leading emoji as logo; strip it from the title to avoid doubling
-    // e.g. app_name "📦 Inventory Manager" → logo "📦", title "Inventory Manager"
-    // Migration: treat legacy "Inventory Manager" name and 📦 emoji as unset
-    const rawName = theme.app_name || 'StockAI';
-    const emojiMatch = rawName.match(/^(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u);
-    const extractedEmoji = emojiMatch ? emojiMatch[0] : '';
-    const extractedTitle = rawName.replace(/^(\p{Emoji_Presentation}|\p{Extended_Pictographic})\s*/u, '').trim() || rawName;
-    // Suppress legacy defaults so new SVG logo + StockAI name shows instead
-    const legacyNames = ['Inventory Manager', 'inventory manager'];
-    window.appLogo = (extractedEmoji === '📦') ? '' : extractedEmoji;
-    window.appName = legacyNames.includes(extractedTitle) ? 'StockAI' : (extractedTitle || 'StockAI');
-  } catch (e) {
-    window.appLogo = '';
-    window.appName = 'StockAI';
-  }
+  } catch (e) { /* ignore malformed localStorage */ }
 
   // ============================================================================
   // 2. WAIT FOR AUTH
-  // auth.js runs first and fires 'auth-ready' when login is confirmed.
-  // If auth is already done (authReady flag set), skip the wait.
+  // auth.js exposes `window.authReady` as a Promise that only resolves on
+  // success — if auth failed, it stays pending and this line never returns.
   // ============================================================================
-  if (!window.authReady) {
-    await new Promise(resolve => window.addEventListener('auth-ready', resolve, { once: true }));
-  }
-
+  await window.authReady;
   const user = window.currentUser;
 
   // ============================================================================
-  // 3. LOAD USER PROFILE
-  // ============================================================================
-  let profile = null;
-  try {
-    const { data, error } = await window.db
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-    if (error) throw error;
-    profile = data;
-    window.currentProfile = profile;
-  } catch (e) {
-    console.warn('Profile load failed:', e);
-    window.currentProfile = {
-      id: user.id,
-      display_name: user.email?.split('@')[0] || 'User',
-      email: user.email
-    };
-  }
-
-  // ============================================================================
-  // 5. LOAD CATEGORIES (table_definitions)
+  // 3. LOAD CATEGORIES (table_definitions)
   // ============================================================================
   let categories = [];
-  try {
-    const { data, error } = await window.db
-      .from('table_definitions')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('display_name');
-    if (error) throw error;
-    categories = data || [];
-  } catch (e) {
-    console.warn('Categories load failed:', e);
-    categories = [];
-  }
+  await loadCategories();
 
   // ============================================================================
-  // 6. INJECT STYLES
+  // 4. ADD SIDEBAR STYLES
   // ============================================================================
   const styleElement = document.createElement('style');
   styleElement.textContent = `
@@ -115,22 +68,6 @@
       --clr-sidebar-header: #0f172a;
       --clr-sidebar-text:   #94a3b8;
       --clr-sidebar-title:  #f1f5f9;
-      --font-base:          15px;
-    }
-
-    /* Scale the entire page with the user's chosen font size */
-    html { font-size: var(--font-base); }
-
-    /* Body fade-in on load */
-    body {
-      opacity: 0;
-      transition: opacity 0.15s ease-in-out;
-      margin: 0;
-      padding: 0;
-    }
-
-    body.loaded {
-      opacity: 1;
     }
 
     /* Sidebar Container */
@@ -534,12 +471,26 @@
   document.head.appendChild(styleElement);
 
   // ============================================================================
-  // 7. HELPER FUNCTIONS
+  // 5. HELPER FUNCTIONS
   // ============================================================================
 
-  /**
-   * Get initials from a name
-   */
+  /** Fetches this user's categories and writes them into the shared `categories` variable. */
+  async function loadCategories() {
+    try {
+      const { data, error } = await window.db
+        .from('table_definitions')
+        .select('*')
+        .eq('user_id', window.currentUser?.id)
+        .order('display_name');
+      if (error) throw error;
+      categories = data || [];
+    } catch (e) {
+      console.warn('Categories load failed:', e);
+      categories = [];
+    }
+  }
+
+  /** Returns up to 2 uppercase initials from a name (used for the avatar circle). */
   function getInitials(name) {
     if (!name) return '?';
     return name
@@ -550,9 +501,7 @@
       .slice(0, 2);
   }
 
-  /**
-   * Get the current page name
-   */
+  /** Returns a human-readable title for the current page (used by the mobile topbar). */
   function getCurrentPageName() {
     const path = window.location.pathname;
     const searchParams = new URLSearchParams(window.location.search);
@@ -570,9 +519,7 @@
     return 'StockAI';
   }
 
-  /**
-   * Determine if a nav item should be active
-   */
+  /** Returns true if this link matches the current URL, so the sidebar can highlight it. */
   function isNavItemActive(href) {
     const path = window.location.pathname;
     const searchParams = new URLSearchParams(window.location.search);
@@ -595,33 +542,12 @@
     return false;
   }
 
-  /**
-   * Build the sidebar HTML
-   */
-  function buildSidebar() {
-    // Create sidebar element
-    const sidebar = document.createElement('aside');
-    sidebar.className = 'sidebar';
-    sidebar.id = 'sidebar';
+  // ============================================================================
+  // 6. BUILDERS
+  // ============================================================================
 
-    // Header
-    const header = document.createElement('div');
-    header.className = 'sidebar-header';
-    // Build header: SVG cube logo (or custom emoji) + text title
-    const titleText = window.appName || 'StockAI';
-    const logoEmoji = window.appLogo || '';
-    const defaultLogoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" style="width:28px;height:28px;flex-shrink:0"><polygon points="50,10 90,30 90,70 50,90 10,70 10,30"/><polyline points="10,30 50,50 90,30"/><line x1="50" y1="50" x2="50" y2="90"/></svg>`;
-    const titleGroupHtml = `
-      <div class="sidebar-title-group">
-        <div class="sidebar-title">${titleText}</div>
-        <div class="sidebar-slogan">The database that builds itself.</div>
-      </div>`;
-    header.innerHTML = logoEmoji
-      ? `<div class="sidebar-logo">${logoEmoji}</div>${titleGroupHtml}`
-      : `<div class="sidebar-logo">${defaultLogoSvg}</div>${titleGroupHtml}`;
-    sidebar.appendChild(header);
-
-    // Navigation
+  /** Builds and returns the <nav> element (Dashboard, categories, Settings, Feedback, About). */
+  function buildNav() {
     const nav = document.createElement('nav');
     nav.className = 'sidebar-nav';
 
@@ -635,7 +561,7 @@
     `;
     nav.appendChild(dashboardLink);
 
-    // Categories divider and section
+    // Categories divider + section label + links
     if (categories.length > 0) {
       const divider1 = document.createElement('div');
       divider1.className = 'nav-divider';
@@ -646,7 +572,6 @@
       categorySection.textContent = 'Categories';
       nav.appendChild(categorySection);
 
-      // Category links
       categories.forEach(category => {
         const link = document.createElement('a');
         const href = `inventory.html?table=${encodeURIComponent(category.table_name)}`;
@@ -660,7 +585,7 @@
       });
     }
 
-    // Settings divider and link
+    // Settings
     const divider2 = document.createElement('div');
     divider2.className = 'nav-divider';
     nav.appendChild(divider2);
@@ -674,7 +599,7 @@
     `;
     nav.appendChild(settingsLink);
 
-    // Contact / feedback link
+    // Feedback button
     const contactDivider = document.createElement('div');
     contactDivider.className = 'nav-divider';
     nav.appendChild(contactDivider);
@@ -692,6 +617,7 @@
     contactLink.appendChild(contactText);
     nav.appendChild(contactLink);
 
+    // About link
     const aboutLink = document.createElement('a');
     aboutLink.className = 'nav-item';
     aboutLink.href = 'about.html';
@@ -699,12 +625,35 @@
     aboutLink.innerHTML = '<span class="nav-icon">ℹ️</span><span>About</span>';
     nav.appendChild(aboutLink);
 
-    sidebar.appendChild(nav);
+    return nav;
+  }
+
+  /** Builds and returns the sidebar <aside> element (header, nav, categories, profile footer). */
+  function buildSidebar() {
+    // Create sidebar element
+    const sidebar = document.createElement('aside');
+    sidebar.className = 'sidebar';
+    sidebar.id = 'sidebar';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'sidebar-header';
+    const logoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" style="width:28px;height:28px;flex-shrink:0"><polygon points="50,10 90,30 90,70 50,90 10,70 10,30"/><polyline points="10,30 50,50 90,30"/><line x1="50" y1="50" x2="50" y2="90"/></svg>`;
+    header.innerHTML = `
+      <div class="sidebar-logo">${logoSvg}</div>
+      <div class="sidebar-title-group">
+        <div class="sidebar-title">StockAI</div>
+        <div class="sidebar-slogan">The database that builds itself.</div>
+      </div>`;
+    sidebar.appendChild(header);
+
+    // Nav (shared with refreshSidebarCategories)
+    sidebar.appendChild(buildNav());
 
     // Footer with user info
     const footer = document.createElement('div');
     footer.className = 'sidebar-footer';
-    const displayName = window.currentProfile?.display_name || user.email?.split('@')[0] || 'User';
+    const displayName = window.currentProfile?.display_name || window.displayNameFrom(user.email);
     const userEmail = user.email || '';
     const initials = getInitials(displayName);
     footer.innerHTML = `
@@ -750,7 +699,144 @@
   }
 
   // ============================================================================
-  // 8. INJECT SIDEBAR INTO DOM
+  // 7. GLOBAL FUNCTIONS
+  // ============================================================================
+
+  /**
+   * Toggle sidebar on mobile
+   */
+  window.toggleSidebar = function() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (sidebar) sidebar.classList.toggle('open');
+    if (overlay) overlay.classList.toggle('open');
+  };
+
+  /**
+   * Logout handler
+   */
+  window.sidebarLogout = async function() {
+    try {
+      await window.db.auth.signOut();
+      localStorage.removeItem('inv_theme');
+      window.location.href = 'landing.html';
+    } catch (e) {
+      console.error('Logout failed:', e);
+      window.location.href = 'landing.html';
+    }
+  };
+
+  /**
+   * Refresh categories and rebuild sidebar navigation
+   */
+  window.refreshSidebarCategories = async function() {
+    await loadCategories();
+
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) {
+      const oldNav = sidebar.querySelector('.sidebar-nav');
+      if (oldNav) oldNav.remove();
+
+      const header = sidebar.querySelector('.sidebar-header');
+      header.parentNode.insertBefore(buildNav(), header.nextSibling);
+    }
+  };
+
+  // Any page can fire `data-changed` to trigger a sidebar nav refresh.
+  window.addEventListener('data-changed', () => window.refreshSidebarCategories());
+
+  // ============================================================================
+  // 8. FEEDBACK MODAL FUNCTIONS
+  // ============================================================================
+
+  function openFeedbackModal() {
+    const backdrop = document.getElementById('feedbackModalBackdrop');
+    const textarea = document.getElementById('feedbackTextarea');
+    const status = document.getElementById('feedbackStatus');
+    if (!backdrop) return;
+    if (status) status.textContent = '';
+    if (textarea) { textarea.value = ''; textarea.focus(); }
+    backdrop.classList.add('open');
+  }
+
+  function closeFeedbackModal() {
+    const backdrop = document.getElementById('feedbackModalBackdrop');
+    if (backdrop) backdrop.classList.remove('open');
+  }
+
+  async function submitFeedback() {
+    const textarea = document.getElementById('feedbackTextarea');
+    const status = document.getElementById('feedbackStatus');
+    const submitBtn = document.querySelector('.feedback-modal-submit');
+    const message = textarea?.value?.trim();
+    if (!message) {
+      if (status) status.textContent = 'Please enter a message.';
+      return;
+    }
+
+    if (submitBtn) submitBtn.disabled = true;
+    if (status) status.textContent = 'Sending…';
+
+    try {
+      // Always get a fresh token before calling the edge function
+      let accessToken = window.currentSession?.access_token;
+      try {
+        const { data } = await window.db.auth.refreshSession();
+        if (data?.session?.access_token) accessToken = data.session.access_token;
+      } catch (_) {}
+      if (!accessToken) throw new Error('Not authenticated');
+
+      const response = await fetch(
+        window.SUPABASE_URL + '/functions/v1/smart-api',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            tool_call: {
+              name: 'send_feedback',
+              input: {
+                message,
+                user_email: window.currentUser?.email || '',
+              },
+            },
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok || data.result?.startsWith('❌')) {
+        throw new Error(data.result || data.error || 'Send failed');
+      }
+
+      // Send email via Web3Forms (client-side, no server needed)
+      fetch('https://api.web3forms.com/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          access_key: 'dd653064-1a32-4524-b218-08a1b972c011',
+          subject: 'StockAI Feedback from ' + (window.currentUser?.email || 'unknown'),
+          from_name: window.currentUser?.email || 'StockAI User',
+          email: window.currentUser?.email || 'noreply@example.com',
+          message,
+        }),
+      }).catch(() => {}); // fire-and-forget
+
+      if (status) status.textContent = '✓ Sent! Thank you.';
+      if (textarea) textarea.value = '';
+      setTimeout(closeFeedbackModal, 1500);
+    } catch (err) {
+      if (status) status.textContent = 'Failed to send. Please try again.';
+      console.error('Feedback error:', err);
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  }
+
+  // ============================================================================
+  // 9. ADD SIDEBAR TO PAGE
   // ============================================================================
 
   const sidebar = buildSidebar();
@@ -825,227 +911,12 @@
   }
 
   // ============================================================================
-  // 9. GLOBAL FUNCTIONS
-  // ============================================================================
-
-  /**
-   * Toggle sidebar on mobile
-   */
-  window.toggleSidebar = function() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('sidebarOverlay');
-    if (sidebar) sidebar.classList.toggle('open');
-    if (overlay) overlay.classList.toggle('open');
-  };
-
-  /**
-   * Logout handler
-   */
-  window.sidebarLogout = async function() {
-    try {
-      await window.db.auth.signOut();
-      localStorage.removeItem('inv_theme');
-      window.location.href = 'landing.html';
-    } catch (e) {
-      console.error('Logout failed:', e);
-      window.location.href = 'landing.html';
-    }
-  };
-
-  /**
-   * Refresh categories and rebuild sidebar navigation
-   */
-  window.refreshSidebarCategories = async function() {
-    try {
-      const { data, error } = await window.db
-        .from('table_definitions')
-        .select('*')
-        .eq('user_id', window.currentUser?.id)
-        .order('display_name');
-      if (error) throw error;
-      categories = data || [];
-
-      // Rebuild nav only
-      const sidebar = document.getElementById('sidebar');
-      if (sidebar) {
-        const oldNav = sidebar.querySelector('.sidebar-nav');
-        if (oldNav) oldNav.remove();
-
-        const nav = document.createElement('nav');
-        nav.className = 'sidebar-nav';
-
-        // Dashboard
-        const dashboardLink = document.createElement('a');
-        dashboardLink.className = 'nav-item' + (isNavItemActive('index.html') ? ' active' : '');
-        dashboardLink.href = 'index.html';
-        dashboardLink.innerHTML = `
-          <span class="nav-icon">📊</span>
-          <span>Dashboard</span>
-        `;
-        nav.appendChild(dashboardLink);
-
-        // Categories
-        if (categories.length > 0) {
-          const divider1 = document.createElement('div');
-          divider1.className = 'nav-divider';
-          nav.appendChild(divider1);
-
-          const categorySection = document.createElement('div');
-          categorySection.className = 'nav-section';
-          categorySection.textContent = 'Categories';
-          nav.appendChild(categorySection);
-
-          categories.forEach(category => {
-            const link = document.createElement('a');
-            const href = `inventory.html?table=${encodeURIComponent(category.table_name)}`;
-            link.className = 'nav-item' + (isNavItemActive(href) ? ' active' : '');
-            link.href = href;
-            link.innerHTML = `
-              <span class="nav-icon">${category.icon || '📋'}</span>
-              <span>${category.display_name}</span>
-            `;
-            nav.appendChild(link);
-          });
-        }
-
-        // Settings
-        const divider2 = document.createElement('div');
-        divider2.className = 'nav-divider';
-        nav.appendChild(divider2);
-
-        const settingsLink = document.createElement('a');
-        settingsLink.className = 'nav-item' + (isNavItemActive('settings.html') ? ' active' : '');
-        settingsLink.href = 'settings.html';
-        settingsLink.innerHTML = `
-          <span class="nav-icon">⚙️</span>
-          <span>Settings</span>
-        `;
-        nav.appendChild(settingsLink);
-
-        // Feedback button
-        const fbDivider = document.createElement('div');
-        fbDivider.className = 'nav-divider';
-        nav.appendChild(fbDivider);
-
-        const fbBtn = document.createElement('button');
-        fbBtn.className = 'nav-item';
-        fbBtn.style.cssText = 'width:100%;background:none;border:none;cursor:pointer;text-align:left;';
-        fbBtn.addEventListener('click', () => openFeedbackModal());
-        const fbIcon = document.createElement('span');
-        fbIcon.className = 'nav-icon';
-        fbIcon.textContent = '\u2709\uFE0F';
-        const fbText = document.createElement('span');
-        fbText.textContent = 'Send Feedback';
-        fbBtn.appendChild(fbIcon);
-        fbBtn.appendChild(fbText);
-        nav.appendChild(fbBtn);
-
-        const header = sidebar.querySelector('.sidebar-header');
-        header.parentNode.insertBefore(nav, header.nextSibling);
-      }
-    } catch (e) {
-      console.error('Failed to refresh categories:', e);
-    }
-  };
-
-  // ============================================================================
-  // 10. FEEDBACK MODAL FUNCTIONS
-  // ============================================================================
-
-  function openFeedbackModal() {
-    const backdrop = document.getElementById('feedbackModalBackdrop');
-    const textarea = document.getElementById('feedbackTextarea');
-    const status = document.getElementById('feedbackStatus');
-    if (!backdrop) return;
-    if (status) status.textContent = '';
-    if (textarea) { textarea.value = ''; textarea.focus(); }
-    backdrop.classList.add('open');
-  }
-
-  function closeFeedbackModal() {
-    const backdrop = document.getElementById('feedbackModalBackdrop');
-    if (backdrop) backdrop.classList.remove('open');
-  }
-
-  async function submitFeedback() {
-    const textarea = document.getElementById('feedbackTextarea');
-    const status = document.getElementById('feedbackStatus');
-    const submitBtn = document.querySelector('.feedback-modal-submit');
-    const message = textarea?.value?.trim();
-    if (!message) {
-      if (status) status.textContent = 'Please enter a message.';
-      return;
-    }
-
-    if (submitBtn) submitBtn.disabled = true;
-    if (status) status.textContent = 'Sending…';
-
-    try {
-      // Always get a fresh token before calling the edge function
-      let accessToken = window.currentSession?.access_token;
-      try {
-        const { data } = await window.db.auth.refreshSession();
-        if (data?.session?.access_token) accessToken = data.session.access_token;
-      } catch (_) {}
-      if (!accessToken) throw new Error('Not authenticated');
-
-      const response = await fetch(
-        (window.SUPABASE_URL || 'https://masngvxdbxqrrreszjxv.supabase.co') + '/functions/v1/smart-api',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            tool_call: {
-              name: 'send_feedback',
-              input: {
-                message,
-                user_email: window.currentUser?.email || '',
-              },
-            },
-          }),
-        }
-      );
-
-      const data = await response.json();
-      if (!response.ok || data.result?.startsWith('❌')) {
-        throw new Error(data.result || data.error || 'Send failed');
-      }
-
-      // Send email via Web3Forms (client-side, no server needed)
-      fetch('https://api.web3forms.com/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          access_key: 'dd653064-1a32-4524-b218-08a1b972c011',
-          subject: 'StockAI Feedback from ' + (window.currentUser?.email || 'unknown'),
-          from_name: window.currentUser?.email || 'StockAI User',
-          email: window.currentUser?.email || 'noreply@example.com',
-          message,
-        }),
-      }).catch(() => {}); // fire-and-forget
-
-      if (status) status.textContent = '✓ Sent! Thank you.';
-      if (textarea) textarea.value = '';
-      setTimeout(closeFeedbackModal, 1500);
-    } catch (err) {
-      if (status) status.textContent = 'Failed to send. Please try again.';
-      console.error('Feedback error:', err);
-    } finally {
-      if (submitBtn) submitBtn.disabled = false;
-    }
-  }
-
-  // ============================================================================
-  // 11. SHOW PAGE (auth complete)
+  // 10. SHOW PAGE
   // ============================================================================
   document.body.classList.add('loaded');
-  document.body.style.opacity = '1'; // override inline style="opacity:0" (inline > class specificity)
 
   // ============================================================================
-  // 11. DISPATCH READY EVENT
+  // 11. SIGNAL SIDEBAR IS READY
   // ============================================================================
   window.dispatchEvent(new CustomEvent('sidebar-ready'));
 })();

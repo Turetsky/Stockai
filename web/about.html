@@ -7,27 +7,15 @@
     <script>
     (function(){try{var t=JSON.parse(localStorage.getItem('inv_theme')||'{}'),r=document.documentElement,m={primary_color_start:'--clr-start',primary_color_end:'--clr-end',accent_color:'--clr-accent',bg_color:'--clr-bg',card_color:'--clr-card',text_primary_color:'--clr-text-primary',text_secondary_color:'--clr-text-secondary'};for(var k in m)if(t[k])r.style.setProperty(m[k],t[k])}catch(e){}})();
     </script>
+    <script src="/config.js"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
+    <link rel="stylesheet" href="/global.css">
     <style>
         :root {
-            --clr-start: #667eea;
-            --clr-end: #764ba2;
-            --clr-accent: #667eea;
-            --clr-bg: #f5f5f5;
-            --clr-card: #ffffff;
+            --clr-bg:           #f5f5f5;
             --clr-text-primary: #1a1a1a;
             --clr-text-secondary: #666;
-            --card-radius: 12px;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--clr-bg);
-            color: var(--clr-text-primary);
-            opacity: 0;
-            transition: opacity 0.15s ease;
-        }
-        body.loaded { opacity: 1; }
 
         .main-content {
             padding: 40px 28px;
@@ -241,7 +229,7 @@
     <script src="auth.js"></script>
     <script src="sidebar.js"></script>
     <script>
-        window.addEventListener('sidebar-ready', () => {
+        window.addEventListener('auth-ready', () => {
             document.body.classList.add('loaded');
         });
         // If sidebar doesn't fire (unauthenticated), still show content

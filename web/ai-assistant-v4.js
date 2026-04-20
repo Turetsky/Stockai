@@ -1,42 +1,36 @@
 /**
- * AI Assistant — Floating Chat Widget  (v4.0)
+ * ai-assistant-v4.js
+ * Floating AI chat widget — the sparkle button + chat panel in the bottom-right.
  *
- * Changes from v3:
- *  - Uses supabase.auth.refreshSession() instead of getSession()
- *    to guarantee a fresh, non-stale JWT on every request.
- *    This is the fix for "invalid JWT" errors when JWT enforcement is ON.
- *  - Falls back gracefully to cached session if refresh fails (offline, etc.)
- *  - Panel dimensions driven by CSS custom properties (setAIPanelSize still works)
- *  - Everything else (context, history, refresh hooks) unchanged.
+ * Builds itself once sidebar.js fires `sidebar-ready`. Sends every message to
+ * the Supabase Edge Function with a freshly refreshed JWT, prepends the running
+ * conversation + current-page context, and renders the reply. If the backend
+ * says `refresh: true` or `navigate: <url>`, the client reacts accordingly.
  */
 (function () {
   'use strict';
 
-  const AI_ENDPOINT = (window.SUPABASE_URL || 'https://masngvxdbxqrrreszjxv.supabase.co') + '/functions/v1/smart-api';
-
-  const AI_PANEL_SIZES = {
-    small:  { width: '300px', height: '420px' },
-    medium: { width: '370px', height: '540px' },
-    large:  { width: '480px', height: '660px' },
-  };
+  // ============================================================================
+  // 1. SETUP + STATE
+  // ============================================================================
+  const AI_ENDPOINT = window.SUPABASE_URL + '/functions/v1/smart-api';
 
   let chatHistory = [];
   let isOpen      = false;
 
-  /* ── Auth helpers ─────────────────────────────────────────── */
+  // ============================================================================
+  // 2. AUTH HELPERS
+  // ============================================================================
 
   function isAuthenticated() {
     return window.currentSession && window.currentSession.access_token;
   }
 
   /**
-   * Get Authorization headers with a guaranteed-fresh JWT.
-   *
-   * KEY CHANGE vs v3:
-   *   We call refreshSession() instead of getSession().
-   *   getSession() returns the cached token even if it's about to expire.
-   *   refreshSession() always exchanges for a new token when possible,
-   *   which is what Supabase JWT enforcement requires.
+   * Returns Authorization headers with a guaranteed-fresh JWT.
+   * Calls refreshSession() first (getSession() returns cached, possibly
+   * expired tokens — the Edge Function's JWT enforcement rejects those).
+   * Falls back to getSession() and then the cached session if refresh fails.
    */
   async function getAuthHeaders() {
     if (window.db) {
@@ -84,7 +78,9 @@
     return { 'Content-Type': 'application/json' };
   }
 
-  /* ── Context helpers ──────────────────────────────────────── */
+  // ============================================================================
+  // 3. CONTEXT HELPERS
+  // ============================================================================
 
   function getContext() {
     const params    = new URLSearchParams(window.location.search);
@@ -95,19 +91,18 @@
     };
   }
 
-  /* ── Refresh hooks ────────────────────────────────────────── */
+  // ============================================================================
+  // 4. REFRESH HOOKS
+  // ============================================================================
 
   function triggerRefresh() {
-    window.dispatchEvent(new CustomEvent('ai-refresh'));
-    if (typeof window.loadInventoryCards === 'function') {
-      setTimeout(window.loadInventoryCards, 500);
-    }
-    if (typeof window.fetchItemsGlobal === 'function') {
-      setTimeout(window.fetchItemsGlobal, 500);
-    }
+    // App-wide signal: any page listening for 'data-changed' will refresh itself.
+    window.dispatchEvent(new CustomEvent('data-changed'));
   }
 
-  /* ── Widget creation ──────────────────────────────────────── */
+  // ============================================================================
+  // 5. WIDGET CREATION
+  // ============================================================================
 
   function createWidget() {
     if (!isAuthenticated()) return;
@@ -173,7 +168,9 @@ What would you like to do?</div>
     if (isOpen) setTimeout(() => document.getElementById('ai-chat-input').focus(), 100);
   }
 
-  /* ── Message rendering ────────────────────────────────────── */
+  // ============================================================================
+  // 6. MESSAGE RENDERING
+  // ============================================================================
 
   function addMessage(text, role) {
     const container = document.getElementById('ai-chat-messages');
@@ -208,7 +205,9 @@ What would you like to do?</div>
     if (el) el.remove();
   }
 
-  /* ── Send message ─────────────────────────────────────────── */
+  // ============================================================================
+  // 7. SEND MESSAGE
+  // ============================================================================
 
   async function sendMessage() {
     const input   = document.getElementById('ai-chat-input');
@@ -276,15 +275,7 @@ What would you like to do?</div>
       const data = await response.json();
       hideTyping();
 
-      let reply = '(No response)';
-      if (data && Array.isArray(data.content) && data.content.length > 0) {
-        reply = data.content.find(b => b.type === 'text')?.text || reply;
-      } else if (data && typeof data.message === 'string') {
-        reply = data.message;
-      } else if (data && typeof data.text === 'string') {
-        reply = data.text;
-      }
-
+      const reply = data.message || '(No response)';
       addMessage(reply, 'ai');
       chatHistory.push({ role: 'assistant', content: reply });
 
@@ -300,23 +291,12 @@ What would you like to do?</div>
     input.focus();
   }
 
-  /* ── Public API ───────────────────────────────────────────── */
-
-  window.setAIPanelSize = function (size) {
-    const dims = AI_PANEL_SIZES[size] || AI_PANEL_SIZES.medium;
-    document.documentElement.style.setProperty('--ai-panel-width',  dims.width);
-    document.documentElement.style.setProperty('--ai-panel-height', dims.height);
-  };
-
-  /* ── Styles ───────────────────────────────────────────────── */
+  // ============================================================================
+  // 8. STYLES
+  // ============================================================================
 
   function injectStyles() {
     const css = `
-      :root {
-        --ai-panel-width:  370px;
-        --ai-panel-height: 540px;
-      }
-
       #ai-chat-btn {
         position: fixed;
         bottom: 24px;
@@ -345,8 +325,8 @@ What would you like to do?</div>
         position: fixed;
         bottom: 96px;
         right: 24px;
-        width: var(--ai-panel-width, 370px);
-        height: var(--ai-panel-height, 540px);
+        width: 370px;
+        height: 540px;
         background: var(--clr-card, #fff);
         border-radius: 18px;
         box-shadow: 0 10px 50px rgba(0,0,0,0.22);
@@ -531,22 +511,14 @@ What would you like to do?</div>
     document.head.appendChild(style);
   }
 
-  /* ── Init ─────────────────────────────────────────────────── */
+  // ============================================================================
+  // 9. INIT
+  // ============================================================================
 
-  function initWidget() {
-    if (!isAuthenticated()) return;
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', createWidget);
-    } else {
-      createWidget();
-    }
-  }
-
-  window.addEventListener('sidebar-ready', initWidget);
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initWidget);
-  } else {
-    initWidget();
-  }
+  // sidebar.js fires 'sidebar-ready' once auth succeeded and the sidebar is
+  // mounted. By then the DOM is ready and window.currentSession exists, so
+  // we can create the widget directly — no DOMContentLoaded dance needed.
+  window.addEventListener('sidebar-ready', () => {
+    if (isAuthenticated()) createWidget();
+  });
 })();

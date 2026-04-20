@@ -1383,9 +1383,7 @@ class _DataTabState extends State<_DataTab> {
       ),
       builder: (_) => _DataCategorySheet(
         onCreated: (name, icon) async {
-          final emoji = icon.isNotEmpty ? '$icon ' : '';
-          await _apiService
-              .sendMessage('Create a new inventory category called "$emoji$name"');
+          await _apiService.createCategory(name, icon);
           _reload();
         },
       ),

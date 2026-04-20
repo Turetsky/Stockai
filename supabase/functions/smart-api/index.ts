@@ -65,7 +65,11 @@ const tools = [
     name: 'create_category',
     description:
       'Create a new inventory category with custom fields. ' +
-      'Always include a "quantity" number field.',
+      'MANDATORY: fields array MUST contain exactly these 2 entries at minimum — omitting either is a critical bug:\n' +
+      '  fields[0]: item name (field_type: "text", required: true) — e.g. { field_name: "name", display_name: "Name", field_type: "text", required: true }\n' +
+      '  fields[1]: quantity (field_type: "number") — e.g. { field_name: "quantity", display_name: "Quantity", field_type: "number" }\n' +
+      '  fields[2+]: any additional custom fields.\n' +
+      'NEVER send only one field. NEVER put a number field at position 0.',
     input_schema: {
       type: 'object',
       properties: {
@@ -364,6 +368,14 @@ async function runTool(
 
         if (!dname?.trim()) throw new Error('display_name is required.');
         if (!fields?.length) throw new Error('At least one field is required.');
+
+        // Enforce required 2-field structure regardless of what the AI sent
+        if (fields[0]?.field_type !== 'text') {
+          fields.unshift({ field_name: 'name', display_name: 'Name', field_type: 'text', required: true });
+        }
+        if (fields.length < 2) {
+          fields.push({ field_name: 'quantity', display_name: 'Quantity', field_type: 'number', required: false });
+        }
 
         // 1. Register category — userDb WITH CHECK enforces user_id = auth.uid()
         const { error: tdErr } = await userDb.from('table_definitions').insert({
@@ -878,7 +890,7 @@ READ:
   get_fields       → column definitions for a table
 
 MANAGE INVENTORY:
-  create_category  → create a new tab (always include a "quantity" number field)
+  create_category  → create a new tab (ALWAYS send BOTH: fields[0]=name/text AND fields[1]=quantity/number)
   rename_category  → rename or change icon
   delete_category  → permanently remove (confirm first!)
   add_field        → add a column
@@ -903,11 +915,18 @@ LAYOUT (set_layout):
   dashboard_card_min_width, item_card_density, ai_panel_size
 
 RULES:
-- Always include a "quantity" number field when creating a category.
 - table_name must be lowercase snake_case.
 - Always confirm with the user before deleting anything or removing a field.
 - Be concise. Summarize what changed after each action.
-- To navigate: say "navigate to inventory.html?table=TABLE_NAME"`;
+- To navigate: say "navigate to inventory.html?table=TABLE_NAME"
+
+CATEGORY CREATION RULES:
+⚠️ MANDATORY: Every create_category call MUST include AT LEAST 2 fields. A category with only one field is broken.
+- fields[0] MUST be the item name field: { field_name: "name", display_name: "Name", field_type: "text", required: true }
+- fields[1] MUST be the quantity field: { field_name: "quantity", display_name: "Quantity", field_type: "number" }
+- fields[2+] are any additional custom fields the user asks for.
+- NEVER omit fields[0] or fields[1]. NEVER put a number/price/cost field at position 0.
+- Always include a relevant emoji icon.`;
 
     const messages: Array<{ role: string; content: unknown }> = [
       { role: 'user', content: userMessage },
