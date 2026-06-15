@@ -12,6 +12,7 @@ import '../main.dart';
 import '../models/theme_settings.dart';
 import '../services/supabase_service.dart';
 import '../services/api_service.dart';
+import '../theme/app_style.dart';
 import 'login_screen.dart';
 
 part 'settings/theme_tab.dart';
@@ -124,16 +125,64 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Theme'),
-            Tab(text: 'Profile'),
-            Tab(text: 'Data'),
-          ],
+        title: ShaderMask(
+          shaderCallback: (rect) =>
+              AppStyle.accentGradient(scheme).createShader(rect),
+          child: const Text(
+            'Settings',
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+                color: Colors.white),
+          ),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(60),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppStyle.hairline(scheme)),
+              ),
+              child: TabBar(
+                controller: _tabController,
+                indicator: BoxDecoration(
+                  gradient: AppStyle.accentGradient(scheme),
+                  borderRadius: BorderRadius.circular(9),
+                  boxShadow: [
+                    BoxShadow(
+                      color: scheme.primary.withValues(alpha: 0.5),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                indicatorSize: TabBarIndicatorSize.tab,
+                indicatorPadding: EdgeInsets.zero,
+                dividerColor: Colors.transparent,
+                labelColor: const Color(0xFF0A0A12),
+                unselectedLabelColor: scheme.onSurfaceVariant,
+                labelStyle: const TextStyle(
+                    fontWeight: FontWeight.w700, fontSize: 13.5),
+                unselectedLabelStyle: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 13.5),
+                splashFactory: NoSplash.splashFactory,
+                overlayColor:
+                    const WidgetStatePropertyAll(Colors.transparent),
+                tabs: const [
+                  Tab(text: 'Theme'),
+                  Tab(text: 'Profile'),
+                  Tab(text: 'Data'),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
       body: TabBarView(

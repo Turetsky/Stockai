@@ -170,6 +170,42 @@ ThemeData _buildTheme(
         statusBarIconBrightness: Brightness.light,
       ),
     ),
+    // Brand component themes — propagate the glass/hairline look to Cards,
+    // inputs and dividers across all screens (settings, category, dialogs)
+    // without per-widget styling.
+    cardTheme: CardThemeData(
+      color: darkPanel,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppStyle.rCard),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.09)),
+      ),
+      margin: const EdgeInsets.symmetric(vertical: 6),
+    ),
+    dividerTheme: DividerThemeData(
+      color: Colors.white.withValues(alpha: 0.08),
+      thickness: 1,
+      space: 1,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: Colors.white.withValues(alpha: 0.04),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: scheme.primary, width: 1.5),
+      ),
+    ),
+    listTileTheme: const ListTileThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+      ),
+    ),
     useMaterial3: true,
   );
 }

@@ -472,6 +472,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildDrawer() {
     final scheme = Theme.of(context).colorScheme;
     return Drawer(
+      backgroundColor: scheme.surface,
       child: Column(
         children: [
               Container(
@@ -483,18 +484,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   20,
                 ),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Theme.of(context).colorScheme.primary,
-                      Color.lerp(
-                        Theme.of(context).colorScheme.primary,
-                        Theme.of(context).colorScheme.tertiary,
-                        0.35,
-                      )!,
-                    ],
-                  ),
+                  gradient: AppStyle.accentGradient(scheme),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -538,26 +528,18 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 8, 2),
-                child: Row(
-                  children: [
-                    Text(
-                      'CATEGORIES',
-                      style: TextStyle(
-                        fontSize: 11,
-                        letterSpacing: 1.2,
-                        fontWeight: FontWeight.w700,
-                        color: scheme.onSurfaceVariant,
-                      ),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 2),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'CATEGORIES',
+                    style: TextStyle(
+                      fontSize: 11,
+                      letterSpacing: 1.4,
+                      fontWeight: FontWeight.w700,
+                      color: AppStyle.textFaint,
                     ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.add, size: 20),
-                      tooltip: 'New category',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _showNewCategorySheet,
-                    ),
-                  ],
+                  ),
                 ),
               ),
               Expanded(
@@ -592,42 +574,86 @@ class _ChatScreenState extends State<ChatScreen> {
                             ? name.replaceFirst(
                                 RegExp(r'^\p{Emoji_Presentation}\s*', unicode: true), '')
                             : name;
-                        return ListTile(
-                          leading: isEmoji
-                              ? Text(icon,
-                                  style: const TextStyle(fontSize: 22))
-                              : const Icon(Icons.inventory_2_outlined),
-                          title: Text(displayName),
-                          onTap: () {
-                            Navigator.pop(context);
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => CategoryScreen(category: cat),
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 3),
+                          child: ListTile(
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            leading: Container(
+                              width: 38,
+                              height: 38,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: scheme.primary.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(11),
+                                border: Border.all(
+                                    color: scheme.primary
+                                        .withValues(alpha: 0.22)),
                               ),
-                            );
-                          },
+                              child: isEmoji
+                                  ? Text(icon,
+                                      style: const TextStyle(fontSize: 18))
+                                  : Icon(Icons.inventory_2_outlined,
+                                      size: 18, color: scheme.primary),
+                            ),
+                            title: Text(displayName,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600, fontSize: 14)),
+                            trailing: Icon(Icons.chevron_right,
+                                size: 18, color: scheme.onSurfaceVariant),
+                            onTap: () {
+                              Navigator.pop(context);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => CategoryScreen(category: cat),
+                                ),
+                              );
+                            },
+                          ),
                         );
                       },
                     );
                   },
                 ),
               ),
-              ListTile(
-                leading: Icon(Icons.add_circle_outline, color: scheme.primary),
-                title: Text('New Category',
-                    style: TextStyle(
-                        color: scheme.primary, fontWeight: FontWeight.w600)),
-                onTap: _showNewCategorySheet,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 2, 10, 8),
+                child: ListTile(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                        color: scheme.primary.withValues(alpha: 0.30)),
+                  ),
+                  leading: Container(
+                    width: 38,
+                    height: 38,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(11),
+                      border: Border.all(
+                          color: scheme.primary.withValues(alpha: 0.22)),
+                    ),
+                    child: Icon(Icons.add, size: 18, color: scheme.primary),
+                  ),
+                  title: Text('New Category',
+                      style: TextStyle(
+                          color: scheme.primary, fontWeight: FontWeight.w600)),
+                  onTap: _showNewCategorySheet,
+                ),
               ),
-              const Divider(height: 1),
+              Divider(height: 1, color: AppStyle.hairline(scheme)),
               ListTile(
-                leading: const Icon(Icons.category),
+                leading: Icon(Icons.category_outlined,
+                    color: scheme.onSurfaceVariant),
                 title: const Text('Manage Categories'),
                 onTap: _showManageCategoriesSheet,
               ),
               ListTile(
-                leading: const Icon(Icons.settings_outlined),
+                leading: Icon(Icons.settings_outlined,
+                    color: scheme.onSurfaceVariant),
                 title: const Text('Settings'),
                 onTap: () {
                   Navigator.pop(context);
