@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Pre-commit secret scanner — blocks commits that add likely API keys/secrets.
+# Install: cp scripts/git-hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# Bypass (only if you are CERTAIN it's a false positive): git commit --no-verify
+set -u
+
+# Secret VALUE patterns (not field names) to keep false positives low:
+#  sk_… ElevenLabs/Stripe-style | sk-… OpenAI | AKIA… AWS | PEM private keys
+patterns='sk_[A-Za-z0-9]{24,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+
+# Only inspect added/changed lines that are being committed.
+hits=$(git diff --cached -U0 --no-color | grep -E '^\+' | grep -EIn "$patterns" || true)
+
+if [ -n "$hits" ]; then
+  echo "✖ pre-commit: possible hardcoded secret in staged changes:" >&2
+  echo "$hits" >&2
+  echo "" >&2
+  echo "Load it from env instead (Dart: --dart-define / String.fromEnvironment;" >&2
+  echo "web: build-time config.js; backend: a Supabase secret)." >&2
+  echo "False positive? Bypass with: git commit --no-verify" >&2
+  exit 1
+fi
+exit 0
