@@ -8,9 +8,31 @@ let currentFilter = '';
 // (not the 'auth-ready' event) because this is an external script: its fetch can
 // race the event, and a promise .then() still fires even if auth resolved first.
 async function bootDashboard() {
+    await syncThemeFromSupabase();   // avoid a stale-theme flash (settings/inventory do the same)
     const profile = window.currentProfile;
     document.getElementById('welcomeText').textContent = `Welcome back, ${profile?.display_name || 'User'}`;
     await loadInventoryCards();
+}
+
+// Pull the saved theme from Supabase and apply it, so the dashboard doesn't
+// show a stale (e.g. old localStorage) theme before the real one loads.
+async function syncThemeFromSupabase() {
+    try {
+        const db = window.db;
+        const userId = window.currentUser?.id;
+        if (!db || !userId || !window.applyThemeVars) return;
+        const { data } = await db.from('ui_settings').select('key,value').eq('user_id', userId);
+        if (!data || !data.length) return;
+        const theme = {};
+        data.forEach(row => { theme[row.key] = row.value; });
+        window.applyThemeVars(theme);
+        // Persist merged result so the next page's FOUC guard is already correct.
+        let stored = {};
+        try { stored = JSON.parse(localStorage.getItem('inv_theme') || '{}'); } catch (e) {}
+        localStorage.setItem('inv_theme', JSON.stringify({ ...stored, ...theme }));
+    } catch (e) {
+        console.warn('Theme sync failed:', e.message);
+    }
 }
 if (window.authReady?.then) window.authReady.then(bootDashboard);
 else window.addEventListener('auth-ready', bootDashboard);
