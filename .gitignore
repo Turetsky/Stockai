@@ -7,6 +7,9 @@ stockai/android/app/google-services.json
 # Supabase config (generated at build time from env vars — do not commit)
 website/config.js
 
+# Local build secrets (fed to flutter via --dart-define-from-file) — NEVER commit
+stockai/secrets.json
+
 # Unused Flutter platforms (StockAI ships Android only)
 stockai/ios/
 stockai/linux/
