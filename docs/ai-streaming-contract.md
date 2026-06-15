@@ -27,8 +27,12 @@ then a wall of text. Streaming makes the reply type out live (and the assistant'
 - **Direct tool-call mode** (`body.tool_call`) is **never** streamed — it returns
   JSON as today.
 - Auth is unchanged: call `refreshSession()` first, send `Authorization: Bearer <jwt>`
-  + `apikey`. JWT gateway enforcement runs **before** the stream opens; an invalid
-  token returns a `401` JSON body, not a stream.
+  + `apikey`. JWT gateway enforcement **and** the function's `getUser` validation both run
+  **before** the stream opens, so **session expiry / invalid token = a plain HTTP `401`
+  JSON response, never an SSE `error` event**. Clients keep their existing
+  401→`refreshSession()`/`SessionExpiredException` retry path on the initial response.
+  The SSE `error` event is reserved for mid-stream failures only (Anthropic/network/tool),
+  not auth — handling it is a defensive fallback, not required for expiry.
 
 ## 3. Response
 
@@ -49,10 +53,10 @@ data: <single-line JSON>
 | `event:` | `data` JSON | Meaning / client action |
 |----------|-------------|-------------------------|
 | `start`  | `{}` | Stream opened. Optionally show a typing indicator. |
-| `token`  | `{"text":"…chunk…"}` | A **delta** of assistant text. **Append** it to the current bubble. (Concatenate deltas — they are not cumulative.) |
-| `tool`   | `{"name":"create_category","status":"running"\|"done"\|"error"}` | Optional UI hint, e.g. "Assistant is creating a category…". Not required to render. |
-| `turn`   | `{"index":N,"stop_reason":"tool_use"\|"end_turn"}` | Turn boundary. Lets the UI separate pre-tool "thinking" text from the final answer if desired. |
-| `done`   | `{"message":"<full final text>","refresh":bool,"navigate":string\|null}` | **Terminal.** `message` is the canonical full text — reconcile against streamed tokens. Then apply `refresh` / `navigate` exactly as with the legacy JSON response. Stream closes after this. |
+| `token`  | `{"text":"…chunk…"}` | A **delta** of assistant text. **Append** it to the current answer bubble. (Concatenate deltas — they are not cumulative.) Tokens stream live from **any** turn, including short "let me check…" narration a turn may emit *before* it calls a tool — see the reset rule on `turn` below. |
+| `tool`   | `{"name":"<raw tool name>","status":"running"\|"done"\|"error"}` | UI hint. `name` is the **raw tool name** (`list_categories`, `get_items`, `get_fields`, `create_category`, `rename_category`, `delete_category`, `add_field`, `remove_field`, `rename_field`, `upsert_item`, `delete_item`, `get_ui_settings`, `set_ui_setting`, `set_layout`) — these are **stable/part of the contract**. Lifecycle: `running` emitted **before** the tool executes, then `done`/`error` **after**; one pair per tool, in order, if a turn calls several. Clients map `name`→a friendly label (e.g. `get_items`→"Checking inventory…") with a generic "Working…" fallback. Pairs well with the `turn` reset rule to mask the bubble-clear with a status chip. Not required to render. |
+| `turn`   | `{"index":N,"stop_reason":"tool_use"\|"end_turn"}` | Turn boundary. **Reset rule:** on `stop_reason:"tool_use"`, **discard the text appended during that turn** (it was pre-tool "thinking", not the answer) and clear the bubble. The user-facing answer is the text streamed **after the last tool turn** (the turn that ends `end_turn`). This lets a client append every `token` blindly within a turn and only act on this one boundary signal. |
+| `done`   | `{"message":"<final answer text>","refresh":bool,"navigate":string\|null}` | **Terminal.** `message` = the **final answer only** (post-last-tool text), i.e. exactly what the bubble holds after the reset rule above — so it's safe to use as the canonical text (e.g. for TTS, which should fire **once here**, not per-token). Then apply `refresh` / `navigate` exactly as with the legacy JSON response. Stream closes after this. |
 | `error`  | `{"error":"…"}` | Failure. Show the error and stop. Stream closes after this. |
 
 ### Metadata
@@ -104,8 +108,12 @@ const dec = new TextDecoder();
 // read chunks, split on \n\n, parse event:/data:, append on token, finalize on done
 ```
 
-## 6. Open items
+## 6. Resolved / open items
 
-- Front-ends: confirm delta-append semantics suit your renderer (TTS may want to start
-  only on `done`; flag if you need a dedicated signal).
+- **Delta-append + TTS** — RESOLVED (Flutter #14): tokens are deltas (client concatenates);
+  TTS fires once on `done.message` (the final answer), not per-token. No extra signal needed.
+- **Intermediate-turn narration** — RESOLVED: handled by the `turn` reset rule (§3) — clients
+  append blindly within a turn and clear on a `tool_use` turn boundary; `done.message` is the
+  final answer only.
+- **Session expiry** — RESOLVED: pre-stream HTTP `401`, never an SSE event (§2).
 - Heartbeat interval may be tuned once we observe real edge/proxy timeouts.
