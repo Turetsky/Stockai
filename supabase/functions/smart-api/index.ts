@@ -32,9 +32,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-/* ─────────────────────────────────────────────────────────────
-   Tool definitions
-───────────────────────────────────────────────────────────── */
+// ============================================================================
+// 1. TOOL DEFINITIONS — schemas the AI sees
+// ============================================================================
 const tools = [
   {
     name: 'list_categories',
@@ -54,7 +54,10 @@ const tools = [
   },
   {
     name: 'get_fields',
-    description: 'Get the field/column definitions for an inventory table.',
+    description: 'Get the field/column definitions for an inventory table. ' +
+      'Fields are ordered by sort_order. The field with the LOWEST sort_order is always the item identity/name (shown as card title). ' +
+      'The field with the SECOND LOWEST sort_order is always the quantity (shown as stock badge). ' +
+      'Always call this before upsert_item.',
     input_schema: {
       type: 'object',
       properties: { table_name: { type: 'string' } },
@@ -65,11 +68,13 @@ const tools = [
     name: 'create_category',
     description:
       'Create a new inventory category with custom fields. ' +
-      'MANDATORY: fields array MUST contain exactly these 2 entries at minimum — omitting either is a critical bug:\n' +
-      '  fields[0]: item name (field_type: "text", required: true) — e.g. { field_name: "name", display_name: "Name", field_type: "text", required: true }\n' +
-      '  fields[1]: quantity (field_type: "number") — e.g. { field_name: "quantity", display_name: "Quantity", field_type: "number" }\n' +
-      '  fields[2+]: any additional custom fields.\n' +
-      'NEVER send only one field. NEVER put a number field at position 0.',
+      'MANDATORY: fields array MUST contain at least 2 entries — omitting either is a bug.\n' +
+      'FIELD ORDER IS CRITICAL — always structure the fields array exactly like this:\n' +
+      '  fields[0]: item identity/name (field_type: "text", required: true) — card title. e.g. { field_name: "name", display_name: "Name", field_type: "text", required: true }\n' +
+      '  fields[1]: quantity (field_type: "number") — stock count badge. e.g. { field_name: "quantity", display_name: "Quantity", field_type: "number" }\n' +
+      '  fields[2+]: any additional custom fields (color, location, notes, price, etc.).\n' +
+      'NEVER omit fields[0] or fields[1]. NEVER put a non-name field at position 0. ' +
+      'The first field must always be the human-readable item name.',
     input_schema: {
       type: 'object',
       properties: {
@@ -160,13 +165,13 @@ const tools = [
   },
   {
     name: 'upsert_item',
-    description: 'Add a new item or update an existing one.',
+    description: 'Add a new item or update an existing one. IMPORTANT: You MUST call get_fields first to get the exact field_name and field_type for this table. The data keys must exactly match field_name values from get_fields. Number fields must have numeric values. Text fields must have string values. Do NOT guess field names.',
     input_schema: {
       type: 'object',
       properties: {
         table_name: { type: 'string' },
         id:         { type: 'string', description: 'UUID of item to update. Omit to create new.' },
-        data:       { type: 'object', description: 'field_name → value pairs' },
+        data:       { type: 'object', description: 'field_name → value pairs. Keys must exactly match field_name from get_fields. Values must match the field_type (number fields need numeric values, text fields need strings).' },
       },
       required: ['table_name', 'data'],
     },
@@ -197,7 +202,6 @@ const tools = [
 HEADER & BRANDING:
 - primary_color_start / primary_color_end  → header gradient (hex)
 - header_text_color                        → header text color (hex)
-- app_name                                 → app title in header
 
 COLORS (web & mobile app):
 - theme_color         → Flutter app primary/seed color (hex, e.g. "#667eea") — changes the whole app palette
@@ -248,8 +252,7 @@ SORT:
 
 SIZE:
 - dashboard_card_min_width → "200px" | "280px" | "320px" | "360px"
-- item_card_density        → "compact" | "normal" | "large"
-- ai_panel_size            → "small" | "medium" | "large"`,
+- item_card_density        → "compact" | "normal" | "large"`,
     input_schema: {
       type: 'object',
       properties: {
@@ -260,9 +263,9 @@ SIZE:
   },
 ];
 
-/* ─────────────────────────────────────────────────────────────
-   Helpers
-───────────────────────────────────────────────────────────── */
+// ============================================================================
+// 2. HELPERS — pgType, sanitizeTableName, assertOwnership
+// ============================================================================
 
 function pgType(fieldType: string): string {
   if (fieldType === 'number') return 'numeric';
@@ -295,9 +298,9 @@ async function assertOwnership(
   }
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Tool executor
-───────────────────────────────────────────────────────────── */
+// ============================================================================
+// 3. TOOL EXECUTOR — switch on tool name, run the requested action
+// ============================================================================
 async function runTool(
   name: string,
   input: Record<string, unknown>,
@@ -369,8 +372,10 @@ async function runTool(
         if (!dname?.trim()) throw new Error('display_name is required.');
         if (!fields?.length) throw new Error('At least one field is required.');
 
-        // Enforce required 2-field structure regardless of what the AI sent
-        if (fields[0]?.field_type !== 'text') {
+        // Enforce required structure: fields[0] must be text (item name), fields[1] must exist (quantity)
+        const firstIsText = fields[0]?.field_type === 'text';
+        if (!firstIsText) {
+          // Prepend a name field if the AI forgot it or put a number field first
           fields.unshift({ field_name: 'name', display_name: 'Name', field_type: 'text', required: true });
         }
         if (fields.length < 2) {
@@ -425,7 +430,7 @@ async function runTool(
           display_name: f.display_name,
           field_type:   f.field_type,
           required:     f.required  ?? false,
-          sort_order:   f.sort_order ?? i + 1,
+          sort_order:   f.sort_order ?? i,
           user_id:      userId,   // scoped per user — two users can share same field names
         }));
         const { error: fdErr } = await adminDb.from('field_definitions').insert(fieldRows);
@@ -618,20 +623,24 @@ async function runTool(
           .single();
 
         if (itemRow) {
-          // Soft-delete: move to recycling bin
-          await userDb.from('recycling_bin').insert({
-            user_id:      userId,
-            source_table: tn,
-            item_id:      input.id as string,
-            item_data:    itemRow,
-          });
+          // Soft-delete: move to recycling bin (non-blocking — failure must not prevent hard delete)
+          try {
+            await userDb.from('recycling_bin').insert({
+              user_id:      userId,
+              source_table: tn,
+              item_id:      input.id as string,
+              item_data:    itemRow,
+            });
 
-          // Auto-cleanup: purge this user's recycled items older than 30 days
-          await userDb
-            .from('recycling_bin')
-            .delete()
-            .eq('user_id', userId)
-            .lt('deleted_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+            // Auto-cleanup: purge this user's recycled items older than 30 days
+            await userDb
+              .from('recycling_bin')
+              .delete()
+              .eq('user_id', userId)
+              .lt('deleted_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+          } catch (_) {
+            // Recycling bin is best-effort; do not block the actual delete
+          }
         }
 
         // Hard-delete from source table (RLS scoped to auth.uid())
@@ -783,9 +792,9 @@ async function runTool(
   }
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Main request handler
-───────────────────────────────────────────────────────────── */
+// ============================================================================
+// 4. MAIN REQUEST HANDLER — serves every incoming POST
+// ============================================================================
 Deno.serve(async (req) => {
   // CORS preflight
   if (req.method === 'OPTIONS') {
@@ -831,9 +840,10 @@ Deno.serve(async (req) => {
     );
 
     /* ── Token validation ─────────────────────────────────── */
-    // adminDb.auth.getUser() validates the JWT signature + expiry via Supabase Auth server.
-    // This is equivalent to JWT enforcement ON — we do it manually for consistent behaviour.
-    const { data: { user }, error: authErr } = await adminDb.auth.getUser(token);
+    // Use userDb (anon key) to validate the JWT — avoids depending on SUPABASE_SERVICE_ROLE_KEY
+    // being present for auth validation. userDb already has the JWT in its global headers,
+    // so auth.getUser(token) sends: Authorization: Bearer {user_jwt} + apikey: {anon_key}.
+    const { data: { user }, error: authErr } = await userDb.auth.getUser(token);
 
     if (authErr || !user) {
       const detail = authErr?.message ?? 'Token invalid or expired.';
@@ -890,7 +900,7 @@ READ:
   get_fields       → column definitions for a table
 
 MANAGE INVENTORY:
-  create_category  → create a new tab (ALWAYS send BOTH: fields[0]=name/text AND fields[1]=quantity/number)
+  create_category  → create a new tab (ALWAYS include BOTH: fields[0] = name (text), fields[1] = quantity (number))
   rename_category  → rename or change icon
   delete_category  → permanently remove (confirm first!)
   add_field        → add a column
@@ -907,12 +917,12 @@ APPEARANCE (set_ui_setting):
   text_primary_color, text_secondary_color,
   item_card_bg, stats_bar_bg, low_stock_color,
   btn_add_bg, btn_edit_bg, btn_del_bg,
-  card_radius, app_name, low_stock_threshold
+  card_radius, low_stock_threshold
 
 LAYOUT (set_layout):
   search_position, stats_position,
   dashboard_sort, inventory_default_sort, inventory_default_sort_dir,
-  dashboard_card_min_width, item_card_density, ai_panel_size
+  dashboard_card_min_width, item_card_density
 
 RULES:
 - table_name must be lowercase snake_case.
@@ -921,12 +931,27 @@ RULES:
 - To navigate: say "navigate to inventory.html?table=TABLE_NAME"
 
 CATEGORY CREATION RULES:
-⚠️ MANDATORY: Every create_category call MUST include AT LEAST 2 fields. A category with only one field is broken.
-- fields[0] MUST be the item name field: { field_name: "name", display_name: "Name", field_type: "text", required: true }
-- fields[1] MUST be the quantity field: { field_name: "quantity", display_name: "Quantity", field_type: "number" }
-- fields[2+] are any additional custom fields the user asks for.
-- NEVER omit fields[0] or fields[1]. NEVER put a number/price/cost field at position 0.
-- Always include a relevant emoji icon.`;
+⚠️ MANDATORY: Every create_category call MUST include AT LEAST 2 fields. Missing either field is a bug.
+- fields[0] MUST be the item identity/name field (field_type: "text", required: true). This is the card title. Example: { field_name: "name", display_name: "Name", field_type: "text", required: true }
+- fields[1] MUST be the quantity field (field_type: "number", required: false). This is the stock count badge. Example: { field_name: "quantity", display_name: "Quantity", field_type: "number" }
+- fields[2+] are any additional custom fields the user requests.
+- NEVER omit fields[0] or fields[1]. A category with only one field is BROKEN.
+- NEVER put a price, cost, type, unit, or any non-name field at position 0. Position 0 is always the human-readable item name.
+- Always include a relevant emoji icon for the category.
+
+DATA INSERTION RULES:
+- ALWAYS call get_fields before upsert_item. Never guess field names.
+- Use the exact field_name values from get_fields. Values must match field_type (number fields need numbers, text fields need strings).
+- To insert multiple items: call upsert_item once per item separately. Do not batch multiple items in one call.
+
+CRITICAL — WHEN INSERTING DATA (upsert_item), FIELD ROLE IS DETERMINED BY SORT_ORDER, NOT BY FIELD_NAME:
+- This rule applies to data insertion only, NOT to category creation (see CATEGORY CREATION RULES above).
+- The field with the LOWEST sort_order is ALWAYS the item's identity/name.
+  Put the human-readable item name there, even if the field happens to be named "cost_per_unit", "type", "sku", etc.
+- The field with the SECOND LOWEST sort_order is ALWAYS the quantity count.
+  Put the numeric quantity there, even if the field happens to be named "type", "color", etc.
+- All remaining fields (sort_order 2+): fill based on their semantic field_name and field_type.
+- If you notice sort_order 0 is a number field type (not text), warn the user that this category was set up incorrectly and offer to recreate it with the right field order.`;
 
     const messages: Array<{ role: string; content: unknown }> = [
       { role: 'user', content: userMessage },

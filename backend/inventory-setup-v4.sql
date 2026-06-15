@@ -358,9 +358,6 @@ AS $$
 DECLARE
   table_rec RECORD;
 BEGIN
-  -- Delete from profiles table
-  DELETE FROM public.profiles WHERE user_id = OLD.id;
-
   -- Delete from ui_settings table
   DELETE FROM public.ui_settings WHERE user_id = OLD.id;
   
@@ -371,7 +368,7 @@ BEGIN
   FOR table_rec IN
     SELECT table_name FROM public.table_definitions WHERE user_id = OLD.id
   LOOP
-    EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(table_rec.table_name);
+    EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(table_rec.table_name);
   END LOOP;
   
   -- Finally, delete from table_definitions table

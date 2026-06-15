@@ -1,0 +1,53 @@
+<!-- ============================================================
+     1. SETUP
+     ============================================================ -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory - StockAI</title>
+
+    <!-- ============================================================
+         2. INSTANT THEME
+         ============================================================ -->
+    <script src="/theme-init.js"></script>
+
+    <!-- ============================================================
+         3. CSS STYLES
+         ============================================================ -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/global.css">
+    <link rel="stylesheet" href="/inventory.css">
+</head>
+<!-- ============================================================
+     4. BODY
+     ============================================================ -->
+<body>
+    <main class="main-content" id="mainContent">
+        <div id="root"><div class="center-msg">Loading...</div></div>
+    </main>
+
+    <!-- ============================================================
+         5. SCRIPT LOADING ORDER
+         ============================================================ -->
+    <script src="/config.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
+    <script src="auth.js"></script>
+    <script src="sidebar.js"></script>
+    <!-- ============================================================
+         6. INVENTORY APP
+         ============================================================ -->
+    <script type="text/babel" src="inventory-app.js"></script>
+
+    <!-- ============================================================
+         7. AI CHAT BUBBLE
+         ============================================================ -->
+    <script src="ai-assistant-v4.js"></script>
+</body>
+</html>

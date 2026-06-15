@@ -1,37 +1,18 @@
-# Flutter generated/tool files
-app/.dart_tool/
-app/.flutter-plugins
-app/.flutter-plugins-dependencies
-app/.packages
-app/build/
-app/.idea/
-app/*.iml
-app/.metadata
-app/devtools_options.yaml
-app/analysis_options.yaml
-app/README.md
-app/test/
+# The Flutter app (stockai/) has its own .gitignore covering
+# build/, .dart_tool/, *.iml, .idea/, unused platforms, etc.
 
-# Android
-app/android/.gradle/
-app/android/local.properties
-app/android/build.gradle.kts
-app/android/app/debug/
-app/android/app/release/
-app/android/app/profile/
-
-# Firebase sensitive config
-app/android/app/google-services.json
-
-# Unused Flutter platforms
-app/ios/
-app/linux/
-app/windows/
-app/macos/
-app/web/
+# Firebase sensitive config (not covered by Flutter's default ignore)
+stockai/android/app/google-services.json
 
 # Supabase config (generated at build time from env vars — do not commit)
-web/config.js
+website/config.js
+
+# Unused Flutter platforms (StockAI ships Android only)
+stockai/ios/
+stockai/linux/
+stockai/windows/
+stockai/macos/
+stockai/web/
 
 # General
 .DS_Store
@@ -44,3 +25,8 @@ node_modules/
 .claude/
 .idx/
 supabase/.temp/
+stockai/android/.kotlin/
+
+# Imported sibling projects (not part of StockAI codebase)
+netlify-version/
+legacy/

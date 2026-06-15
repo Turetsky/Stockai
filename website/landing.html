@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StockAI — Sign in</title>
+    <script src="/config.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/global.css">
+    <link rel="stylesheet" href="/landing.css">
+</head>
+
+<body class="loaded">
+    <main class="lp-shell">
+
+        <!-- ── BRAND PANEL ── -->
+        <aside class="lp-brand">
+            <div class="lp-logo">
+                <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
+                    <polygon points="50,10 90,30 90,70 50,90 10,70 10,30"/>
+                    <polyline points="10,30 50,50 90,30"/>
+                    <line x1="50" y1="50" x2="50" y2="90"/>
+                </svg>
+                <span>StockAI</span>
+            </div>
+            <div class="lp-eyebrow"><span class="dot"></span> AI Inventory · v4.0</div>
+            <h1 class="lp-headline">The database that <span class="lp-grad">builds itself.</span></h1>
+            <p class="lp-tagline">Sign in to manage your inventory by conversation — StockAI designs the schema and keeps it organized for you.</p>
+            <ul class="lp-points">
+                <li>Build categories in plain language</li>
+                <li>Track anything, your way</li>
+                <li>Private by design</li>
+            </ul>
+            <a href="about.html" class="lp-learn">Learn more →</a>
+        </aside>
+
+        <!-- ── AUTH PANEL ── -->
+        <section class="lp-auth">
+            <div class="tabs">
+                <button class="tab-button active" data-tab="login">Login</button>
+                <button class="tab-button" data-tab="signup">Sign Up</button>
+            </div>
+
+            <!-- Login Tab -->
+            <div id="login" class="tab-content active">
+                <div id="login-message"></div>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="login-email">Email Address</label>
+                        <input type="email" id="login-email" name="email" placeholder="you@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <input type="password" id="login-password" name="password" placeholder="••••••••" required>
+                    </div>
+                    <div class="forgot-password">
+                        <a id="forgot-password-link">Forgot password?</a>
+                    </div>
+                    <button type="submit" class="submit-button" id="login-button">Sign In</button>
+                </form>
+
+                <div id="forgot-password-form" style="display: none;">
+                    <div id="reset-message"></div>
+                    <div class="form-group">
+                        <label for="reset-email">Email Address</label>
+                        <input type="email" id="reset-email" placeholder="you@example.com" required>
+                    </div>
+                    <button type="button" class="submit-button" id="reset-button">Send Reset Link</button>
+                    <div class="back-to-login">
+                        <a id="back-to-login-link">Back to login</a>
+                    </div>
+                </div>
+
+                <div id="new-password-form" style="display: none;">
+                    <h3>Set New Password</h3>
+                    <div id="new-password-message"></div>
+                    <div class="form-group">
+                        <label for="new-password">New Password</label>
+                        <input type="password" id="new-password" placeholder="••••••••" minlength="6" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-password-confirm">Confirm Password</label>
+                        <input type="password" id="new-password-confirm" placeholder="••••••••" minlength="6" required>
+                    </div>
+                    <button type="button" class="submit-button" id="new-password-button">Update Password</button>
+                </div>
+            </div>
+
+            <!-- Sign Up Tab -->
+            <div id="signup" class="tab-content">
+                <div id="signup-message"></div>
+                <form id="signup-form">
+                    <div class="form-group">
+                        <label for="signup-name">Display Name</label>
+                        <input type="text" id="signup-name" name="display_name" placeholder="John Doe" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-email">Email Address</label>
+                        <input type="email" id="signup-email" name="email" placeholder="you@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-password">Password</label>
+                        <input type="password" id="signup-password" name="password" placeholder="••••••••" minlength="6" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-confirm">Confirm Password</label>
+                        <input type="password" id="signup-confirm" name="confirm_password" placeholder="••••••••" minlength="6" required>
+                    </div>
+                    <button type="submit" class="submit-button" id="signup-button">Create Account</button>
+                </form>
+            </div>
+        </section>
+    </main>
+
+    <script src="landing.js"></script>
+</body>
+</html>

@@ -24,17 +24,18 @@ AI-powered inventory management system with a web app and Flutter mobile app. Us
 ## Project Structure
 
 ```
-├── web/              # Static frontend
+├── website/              # Static frontend
 │   ├── landing.html  # Login / signup
 │   ├── index.html    # Dashboard
 │   ├── inventory.html# Item management
 │   ├── settings.html # Profile & theme
 │   ├── sidebar.js    # Shared auth, nav, Supabase client
 │   └── ai-assistant-v4.js  # Floating AI chat widget
+├── supabase/functions/
+│   └── smart-api/index.ts    # Supabase Edge Function — AI tool-use loop (deploy path)
 ├── backend/
-│   ├── smart-api-v4.ts       # Supabase Edge Function — AI tool-use loop
 │   └── inventory-setup-v4.sql# Database schema (single source of truth)
-├── app/              # Flutter mobile app
+├── stockai/          # Flutter mobile app (was `app/`)
 │   ├── lib/
 │   │   ├── main.dart
 │   │   ├── models/
@@ -51,10 +52,10 @@ AI-powered inventory management system with a web app and Flutter mobile app. Us
 
 ### Web
 
-No build step required. Supabase URL and anon key are configured in `web/sidebar.js` and `web/ai-assistant-v4.js`.
+No build step required. Supabase URL and anon key are configured in `website/sidebar.js` and `website/ai-assistant-v4.js`.
 
 ```bash
-cd web
+cd website
 npx http-server
 # or
 python -m http.server 8000
@@ -74,7 +75,7 @@ Deploy via the Supabase Dashboard. The function requires two secrets:
 ### Mobile (Flutter)
 
 ```bash
-cd app
+cd stockai
 flutter pub get
 flutter run
 ```
@@ -84,7 +85,7 @@ Build and distribute APK:
 scripts/distribute.bat
 ```
 
-> **Note:** `google-services.json` is excluded from this repo. Add your own from the Firebase console to `app/android/app/`.
+> **Note:** `google-services.json` is excluded from this repo. Add your own from the Firebase console to `stockai/android/app/`.
 
 ## Database
 

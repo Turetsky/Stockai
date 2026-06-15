@@ -1,3 +1,3 @@
 [build]
-  command = "printf 'window.SUPABASE_URL=\"%s\";\nwindow.SUPABASE_ANON_KEY=\"%s\";\n' \"$SUPABASE_URL\" \"$SUPABASE_ANON_KEY\" > web/config.js"
-  publish = "web"
+  command = "printf 'window.SUPABASE_URL=\"%s\";\nwindow.SUPABASE_ANON_KEY=\"%s\";\n' \"$SUPABASE_URL\" \"$SUPABASE_ANON_KEY\" > website/config.js"
+  publish = "website"

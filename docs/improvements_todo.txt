@@ -1,0 +1,166 @@
+STOCKAI — IMPROVEMENTS & DECISIONS NOTES
+Captured 2026-04-28 from the comparison session against the Netlify-agent-built
+inventory site (tourmaline-malasada-cf1634.netlify.app, 9 min agent build).
+
+================================================================================
+QUICK FIXES (under a day each)
+================================================================================
+
+[1] FORGOT-PASSWORD REDIRECTS TO LOCALHOST
+    Cause: Supabase project's "Site URL" setting still points at localhost.
+    Fix:   Supabase Dashboard → Project Settings → Authentication → URL Configuration
+           - Site URL:        https://autobase.netlify.app  (or cchi.netlify.app)
+           - Redirect URLs:   add  https://autobase.netlify.app/**
+                              add  https://cchi.netlify.app/**
+           Save and re-test. Old already-sent reset emails stay broken.
+
+[2] SUPABASE 7-DAY PROJECT PAUSE
+    Free tier pauses inactive projects (caused today's "Failed to fetch" / DNS error).
+    Fix:   Set up a free uptime ping every ~6 days.
+           cron-job.org (free) → ping https://masngvxdbxqrrreszjxv.supabase.co/auth/v1/health
+           Solves the issue forever, no migration needed.
+
+================================================================================
+CHAT-UX UPGRADES (port concepts from the new app — small wins)
+================================================================================
+
+[3] STREAMDOWN — RICH MARKDOWN RENDERING WITH WIDGETS
+    What it does: when AI emits a Markdown table or code block, browser renders it
+    as a real <table>/<pre> with auto-attached buttons:
+       - Tables  → Copy / Download CSV / View fullscreen
+       - Code    → Copy / Run
+       - Mermaid → renders as a real diagram
+    Mechanism (plain English):
+       - AI just emits plain Markdown (no change to backend / system prompt needed).
+       - Browser-side library watches for Markdown patterns (| | |  ```  # etc.)
+       - Builds proper HTML and wraps in a "card" with action buttons.
+       - Re-parses on every streamed chunk so widgets fill in progressively.
+    Effort: ~1 day total.
+    Steps:
+       a. Add Streamdown's vanilla-JS bundle via CDN <script> in HTML pages.
+       b. In ai-assistant-v4.js, replace plain text rendering of assistant
+          replies with: Streamdown.render(replyText, bubbleElement)
+       c. Tweak system prompt in supabase/functions/smart-api/index.ts to encourage Markdown tables
+          for list responses (e.g. "Show me all items" → table of items).
+
+[4] STREAMING REPLIES (SSE) INSTEAD OF WAIT-THEN-DUMP
+    Today: chat waits for the full Claude response, then drops it. ~3-5s spinner.
+    Goal:  words appear as Claude types them. Same total time, feels much faster.
+    Three layers all need fixing:
+       a. supabase/functions/smart-api/index.ts:  add  stream: true  to the Anthropic fetch.
+       b. supabase/functions/smart-api/index.ts:  return a ReadableStream that pipes Anthropic's SSE
+                            chunks straight to the browser, instead of awaiting
+                            resp.json() and returning a single JSON.
+                            For tool-use loops: stream text deltas as they come,
+                            pause stream when Claude wants a tool, run the tool,
+                            resume the stream with the tool result.
+       c. ai-assistant-v4.js:  replace  await response.json()  with
+                            response.body.getReader() loop that appends each
+                            chunk's text to the chat bubble (and feeds Streamdown
+                            so widgets fill in live).
+    Effort: ~half day if no tool-use, ~1 day with the tool-use loop.
+
+[5] INLINE TOOL-CALL STATUS BADGES (the "Inventory updated" pills)
+    What you saw on the new app: each time Claude calls a tool, a small green
+    pill appears INSIDE the assistant bubble — "🔄 Inventory updated".
+    Effect: user sees Claude's reasoning step by step instead of one big text
+    blob at the end.
+    Mechanism: when the SSE stream emits a TOOL_CALL_END event with a result,
+    the chat UI inserts a small pill component above/below the next text chunk.
+    Effort: ~half day on top of streaming (#4). Requires #4 first.
+
+[6] AUTO-REFRESH OF VIEWS AFTER AI CHANGES DATA
+    Already partly there: StockAI fires a `data-changed` CustomEvent.
+    Improvement: also fire after EVERY tool-result event during a stream, so the
+    inventory grid updates the instant the AI finishes adding/editing.
+    Effort: ~1 hour once streaming is in.
+
+================================================================================
+LARGER QUESTION — MIGRATE OFF SUPABASE TO NETLIFY?
+================================================================================
+
+[7] SHOULD WE REBUILD STOCKAI ON NETLIFY'S STACK?
+    Pros (vs current Supabase setup):
+       - No 7-day pause (Netlify Database = Neon Postgres, data persists forever;
+         5-min compute cold start instead).
+       - One less account to manage (no Supabase).
+       - Streaming chat is native via @tanstack/ai library.
+       - AI Gateway pays the Anthropic bill until quota — but plan to plug in own
+         key so you keep observability.
+       - Modern stack (TanStack Start + React + Tailwind + Drizzle).
+    Cons (what gets harder, not lost):
+       - Less convenient DB admin (Supabase's table editor is slick; Neon's
+         dashboard is bare-bones — would use DBeaver or netlify db CLI).
+       - No Row-Level Security as a safety net — every read/write must be wrapped
+         in a server function that enforces user_id ownership manually.
+       - Frontend writes change shape: today browser calls db.from('toners').select()
+         directly; on Netlify everything routes through ~10-14 server endpoints.
+    What you do NOT lose if you port carefully:
+       - Custom dynamic per-user tables (CREATE TABLE works on Neon too).
+       - All 13 AI tools (port the implementations from Supabase calls to Drizzle).
+       - Theme system (it's all browser-side, framework-agnostic).
+       - CSV export (browser-side).
+       - Flutter app (just point at new endpoints + swap auth client).
+       - Multi-user isolation (enforce in code instead of RLS).
+    Effort: ~7-10 working days for a careful port. Not 2-3 weeks.
+
+[8] ALTERNATIVE PLAN — BUILD STOCKAI'S FEATURES ON THE NETLIFY-BUILT SITE,
+    KEEP SUPABASE ONE RUNNING, COMPARE SIDE-BY-SIDE
+    Foundation: the 47-file TanStack Start app already extracted to
+    /home/yaakov/code/tourmaline-malasada-source/  (verified 46/47 byte-perfect
+    against live, package-lock.json regenerates anyway).
+    Gaps to fill on top of the Netlify base:
+       - Dynamic per-user categories with custom fields:  ~3 days
+       - Add 9 more AI tools (rename/delete/upsert/run_sql/fields/ui_settings):  ~2 days
+       - Theme system (presets + color pickers + ui_settings table):  ~2 days
+       - CSV export button:  ~half day
+       - About page + feedback modal:  ~1 day
+       - Update Flutter app to point at new endpoints + swap auth:  ~2 days
+    Total: ~10-12 days.
+    Result: two working versions. A/B test. Ship the winner, keep the other as backup.
+
+================================================================================
+FACTS GATHERED ABOUT THE NETLIFY-BUILT SITE (FOR REFERENCE)
+================================================================================
+
+- URL:           tourmaline-malasada-cf1634.netlify.app
+- Login:         yjturetsky@gmail.com / fHuWh2LTgB7Y7Ci
+- Built by:      Netlify Agent Runners (Claude Agent), 9m 20s, 292 credits
+- Original prompt:
+    "build me an inventory wensite that i can add and edit and manage
+     categories with a side bar for the navigation and an auth to sign in
+     and with an ai built in so i can talk to so it can add stuff"
+- Stack:         TanStack Start (React) + Tailwind + Lucide icons
+- Auth:          Netlify Identity (cookie-based JWT, nf_jwt)
+- DB:            Netlify Database (managed Neon Postgres) + Drizzle ORM
+- AI route:      /api/inventory-chat
+- AI library:    @tanstack/ai-react + Streamdown
+- AI providers:  Anthropic → OpenAI → Gemini → Ollama (fallback chain)
+- AI key:        NONE in env vars (Netlify AI Gateway provisions automatically;
+                  free tier shows "153 credits remaining" warning).
+- Tools:         4 (addInventoryItem, listInventoryItems, addCategory, listCategories)
+- Streaming:     Yes (SSE, AG-UI event protocol: RUN_STARTED / TOOL_CALL_* /
+                  TEXT_MESSAGE_*)
+- Source files:  47 total (incl. .claude/skills the agent followed) — 462KB.
+                  Saved at /home/yaakov/code/tourmaline-malasada-source/.
+
+Compared to StockAI:
+- StockAI has 13 tools vs new app's 4.
+- StockAI has dynamic per-user tables; new app has fixed schema (items, categories).
+- StockAI has Flutter app; new app is web-only.
+- StockAI has theme customization with color pickers; new app does not.
+- StockAI has CSV export; new app does not.
+- New app has streaming + Streamdown widgets; StockAI does not.
+- New app has multi-provider AI fallback; StockAI is Anthropic-only.
+
+================================================================================
+RECOMMENDED ORDER OF ATTACK
+================================================================================
+
+1. Fix forgot-password redirect (#1) — 5 minutes in Supabase dashboard.
+2. Set up uptime ping (#2) — 5 minutes on cron-job.org.
+3. Add Streamdown for nicer chat output (#3) — biggest visible win, 1 day.
+4. Add streaming responses (#4) — feels much faster, 1 day.
+5. Add inline tool-call badges (#5) — half day after streaming.
+6. THEN decide on the Netlify migration question (#7 vs #8) once you've seen how
+   much the chat-UX upgrades (#3-5) close the gap.

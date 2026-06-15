@@ -1,0 +1,41 @@
+FLUTTER BUILD & CHROME PREVIEW COMMANDS
+========================================
+
+BUILD COMMANDS
+--------------
+flutter build web                                  # Build for web (output to build/web/)
+flutter build web --web-renderer canvaskit         # Build with CanvasKit renderer
+flutter build web --web-renderer html              # Build with HTML renderer
+flutter build web --release                        # Release build
+flutter build web --profile                        # Profile build
+
+
+CHROME PREVIEW (DEV/RUN)
+------------------------
+flutter run -d chrome                              # Run in Chrome
+flutter run -d chrome --hot                        # Run with hot reload
+flutter run -d chrome --web-port 8080             # Run on specific port
+flutter run -d chrome --web-renderer canvaskit     # Run with CanvasKit renderer
+flutter run -d chrome --web-renderer html          # Run with HTML renderer
+flutter run -d web-server --web-port 8080         # Headless dev server — open URL in any browser (incl. Claude DevTools MCP)
+
+
+HEADLESS / ANY BROWSER
+-----------------------
+flutter run -d web-server --web-port 8080         # Run headless, access via any browser
+
+
+USEFUL
+------
+flutter devices                                    # List available devices
+
+
+HOT RELOAD (while running in terminal)
+---------------------------------------
+r   = Hot reload (injects updated code, preserves state)
+R   = Hot restart (full restart, resets state)
+q   = Quit
+
+NOTE: Hot reload is manual (press r) when running from terminal.
+      VS Code / Android Studio / IntelliJ can auto hot reload on save
+      via their Flutter plugin settings.

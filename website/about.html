@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About — StockAI</title>
+    <script src="/theme-init.js"></script>
+    <script src="/config.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/global.css">
+    <link rel="stylesheet" href="/about.css">
+</head>
+<body>
+    <main class="main-content" id="mainContent">
+
+        <!-- ── HERO ── -->
+        <section class="ab-wrap ab-hero">
+            <div class="ab-hero-copy">
+                <div class="ab-logo-mark">
+                    <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
+                        <polygon points="50,10 90,30 90,70 50,90 10,70 10,30"/>
+                        <polyline points="10,30 50,50 90,30"/>
+                        <line x1="50" y1="50" x2="50" y2="90"/>
+                    </svg>
+                    <span>StockAI</span>
+                </div>
+                <div class="ab-eyebrow"><span class="dot"></span> AI Inventory · v4.0</div>
+                <h1 class="ab-title">The database that <span class="ab-grad-text">builds itself.</span></h1>
+                <p class="ab-sub">Describe what you want to track in plain language. StockAI designs the schema, fills the columns, and keeps it organized — no spreadsheets, no setup.</p>
+                <div class="ab-cta">
+                    <a href="index.html" class="ab-btn ab-btn-primary">Open dashboard →</a>
+                    <a href="landing.html" class="ab-btn ab-btn-ghost">Sign in</a>
+                </div>
+            </div>
+
+            <!-- prompt → schema demo -->
+            <div class="ab-demo" aria-hidden="true">
+                <div class="ab-demo-bar"><i></i><i></i><i></i></div>
+                <div class="ab-prompt">
+                    <span class="chev">&gt;</span>track office toners — name, quantity &amp; shelf<span class="caret"></span>
+                </div>
+                <div class="ab-demo-arrow">StockAI builds the <span>schema</span> ↓</div>
+                <div class="ab-schema">
+                    <div class="ab-schema-row head"><div>Toner</div><div>Qty</div><div>Shelf</div></div>
+                    <div class="ab-schema-row r1"><div>HP 26X Black</div><div class="num">12</div><div>A-3</div></div>
+                    <div class="ab-schema-row r2"><div>Brother TN760</div><div class="num">4</div><div>B-1</div></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── FEATURES ── -->
+        <section class="ab-wrap ab-section">
+            <div class="ab-section-head">
+                <h2>Everything, by conversation</h2>
+                <span class="idx">/ 01 — capabilities</span>
+            </div>
+            <div class="ab-features">
+                <div class="feat">
+                    <div class="feat-i">🤖</div><span class="feat-n">01</span>
+                    <h3>AI-powered</h3>
+                    <p>Create, edit, and query inventory with natural-language commands — the assistant does the rest.</p>
+                </div>
+                <div class="feat">
+                    <div class="feat-i">📂</div><span class="feat-n">02</span>
+                    <h3>Custom categories</h3>
+                    <p>Track anything — from cables to cars to collectibles. You define the fields, or let the AI.</p>
+                </div>
+                <div class="feat">
+                    <div class="feat-i">🎨</div><span class="feat-n">03</span>
+                    <h3>Fully themeable</h3>
+                    <p>Recolor every surface, or just ask the assistant to restyle the whole app on command.</p>
+                </div>
+                <div class="feat">
+                    <div class="feat-i">📱</div><span class="feat-n">04</span>
+                    <h3>Web + mobile</h3>
+                    <p>Use the web app or the native mobile app. Your data stays in sync everywhere you go.</p>
+                </div>
+                <div class="feat">
+                    <div class="feat-i">🔒</div><span class="feat-n">05</span>
+                    <h3>Private by design</h3>
+                    <p>Row-level security isolates your data — no other user can see or touch your inventory.</p>
+                </div>
+                <div class="feat">
+                    <div class="feat-i">📤</div><span class="feat-n">06</span>
+                    <h3>Import &amp; export</h3>
+                    <p>Move data in and out as CSV any time. Round-trips losslessly back into your categories.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── HOW IT WORKS ── -->
+        <section class="ab-wrap ab-section">
+            <div class="ab-section-head">
+                <h2>From sentence to system</h2>
+                <span class="idx">/ 02 — how it works</span>
+            </div>
+            <div class="ab-steps">
+                <div class="step">
+                    <div class="step-n ab-grad-text">01</div>
+                    <h3>Describe it</h3>
+                    <p>Tell StockAI what you want to track. "I need to log my printer toners and how many are left."</p>
+                </div>
+                <div class="step">
+                    <div class="step-n ab-grad-text">02</div>
+                    <h3>It builds</h3>
+                    <p>The assistant designs a category with the right fields and types — instantly, no forms.</p>
+                </div>
+                <div class="step">
+                    <div class="step-n ab-grad-text">03</div>
+                    <h3>You manage</h3>
+                    <p>Add items, run reports, sort, and restyle — all by chatting, or with the classic UI.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── FINAL CTA ── -->
+        <section class="ab-wrap">
+            <div class="ab-final">
+                <h2>Start with a sentence.</h2>
+                <p>Spin up your first self-building database in under a minute.</p>
+                <div class="ab-cta">
+                    <a href="index.html" class="ab-btn ab-btn-primary">Go to dashboard →</a>
+                    <a href="landing.html" class="ab-btn ab-btn-ghost">Create an account</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── FOOTER ── -->
+        <footer class="ab-wrap ab-footer">
+            <span>© StockAI — the database that builds itself.</span>
+            <span class="ab-version">v4.0</span>
+        </footer>
+    </main>
+
+    <script>window.AUTH_OPTIONAL = true;</script> <!-- public page: guests may view without login -->
+    <script src="auth.js"></script>
+    <script src="sidebar.js"></script>
+    <script>
+        window.addEventListener('auth-ready', () => document.body.classList.add('loaded'));
+        // If sidebar doesn't fire (unauthenticated), still reveal the page
+        setTimeout(() => document.body.classList.add('loaded'), 500);
+    </script>
+    <script src="ai-assistant-v4.js"></script>
+</body>
+</html>

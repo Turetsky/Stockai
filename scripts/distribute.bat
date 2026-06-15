@@ -4,13 +4,13 @@ echo  StockAI - Firebase App Distribution
 echo ============================================
 echo.
 
-set APK="%~dp0..\app\build\app\outputs\flutter-apk\app-release.apk"
+set APK="%~dp0..\stockai\build\app\outputs\flutter-apk\app-release.apk"
 set APP_ID=1:494810929579:android:798b5dc63ed5efba231aee
 set PROJECT=stockai-75833731-f9741
 
 if not exist %APK% (
   echo ERROR: APK not found at %APK%
-  echo Build it first: cd app ^&^& flutter build apk --release
+  echo Build it first: cd stockai ^&^& flutter build apk --release
   pause
   exit /b 1
 )

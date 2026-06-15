@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — StockAI</title>
+
+    <!-- instant theme (FOUC guard) -->
+    <script src="/theme-init.js"></script>
+
+    <!-- fonts + styles -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/global.css">
+    <link rel="stylesheet" href="/index.css">
+</head>
+
+<body>
+    <main class="main-content" id="mainContent">
+        <div class="dash">
+
+            <!-- ── HEADER ── -->
+            <header class="dash-head">
+                <div>
+                    <div class="dash-eyebrow"><span class="dot"></span> Dashboard</div>
+                    <h1 class="dash-title" id="welcomeText">Welcome back</h1>
+                </div>
+                <button id="exportAllBtn" class="dash-export" onclick="exportAllCategories()" title="Download all inventory data as CSV files">⬇ Export all</button>
+            </header>
+
+            <!-- ── AI COMMAND HERO ── -->
+            <section class="ai-hero">
+                <div class="ai-hero-label">✨ Ask StockAI</div>
+                <h2 class="ai-hero-title">What do you want to track?</h2>
+                <form class="ai-hero-bar" id="aiDashForm">
+                    <span class="ai-hero-chev">›</span>
+                    <input id="aiDashInput" autocomplete="off" placeholder="e.g. “add 20 USB-C cables to Electronics” or “create a category for my tools”">
+                    <button type="submit" class="ai-hero-send" title="Ask StockAI">→</button>
+                </form>
+                <div class="ai-hero-chips">
+                    <button type="button" data-ai-prefill="Create a new category for ">＋ New category</button>
+                    <button type="button" data-ai="Show me low-stock items across all my categories">⚠ Low stock</button>
+                    <button type="button" data-ai="Give me a short summary of my whole inventory">📊 Summarize</button>
+                    <button type="button" data-ai="Make the theme dark blue">🎨 Restyle</button>
+                </div>
+            </section>
+
+            <!-- ── SEARCH + SORT + NEW ── -->
+            <div class="controls-bar">
+                <div class="search-wrap">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                    <input type="text" id="dashSearch" placeholder="Search categories…" oninput="filterCards(this.value)">
+                </div>
+                <div class="sort-bar">
+                    <span class="sort-label">Sort</span>
+                    <button class="sort-btn active" data-sort="name_asc">A → Z</button>
+                    <button class="sort-btn" data-sort="name_desc">Z → A</button>
+                    <button class="sort-btn" data-sort="count_desc">Most Items</button>
+                    <button class="sort-btn" data-sort="qty_desc">Most Qty</button>
+                </div>
+                <button class="add-cat-btn" onclick="showAddCategoryModal()">＋ New Category</button>
+            </div>
+
+            <!-- ── CARD GRID ── -->
+            <div class="inventory-grid" id="inventoryGrid">
+                <div class="empty-state">Loading…</div>
+            </div>
+        </div>
+
+        <!-- ── NEW CATEGORY MODAL ── -->
+        <div class="modal-overlay" id="addCatModal" style="display:none">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h2>Create New Category</h2>
+                    <button class="modal-close" onclick="hideAddCategoryModal()">✕</button>
+                </div>
+                <form id="addCatForm" onsubmit="createCategory(event)">
+                    <div class="form-group">
+                        <label>Category Name</label>
+                        <input type="text" id="catName" required placeholder="e.g. Computer Accessories">
+                    </div>
+                    <div class="form-group">
+                        <label>Icon (emoji)</label>
+                        <input type="text" id="catIcon" value="📦" maxlength="4">
+                    </div>
+                    <div class="form-group">
+                        <label>Fields (columns)</label>
+                        <div id="fieldsList">
+                            <div class="field-row">
+                                <input type="text" value="Name" class="field-name" required>
+                                <select class="field-type"><option value="text">Text</option><option value="number">Number</option><option value="date">Date</option></select>
+                                <button type="button" class="remove-field-btn" onclick="this.closest('.field-row').remove()">✕</button>
+                            </div>
+                            <div class="field-row">
+                                <input type="text" value="Quantity" class="field-name" required>
+                                <select class="field-type"><option value="text">Text</option><option value="number" selected>Number</option><option value="date">Date</option></select>
+                                <button type="button" class="remove-field-btn" onclick="this.closest('.field-row').remove()">✕</button>
+                            </div>
+                        </div>
+                        <button type="button" class="add-field-btn" onclick="addFieldRow()">＋ Add Field</button>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary" id="createCatBtn">Create Category</button>
+                        <button type="button" class="btn-secondary" onclick="hideAddCategoryModal()">Cancel</button>
+                    </div>
+                    <div id="catError" class="error-msg" style="display:none"></div>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <!-- ── SCRIPTS ── -->
+    <script src="/config.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
+    <script src="auth.js"></script>
+    <script src="sidebar.js"></script>
+    <script src="index.js"></script>
+    <script src="ai-assistant-v4.js"></script>
+</body>
+</html>
