@@ -84,6 +84,12 @@
     .sidebar-logo {
       font-size: 28px;
       flex-shrink: 0;
+      color: var(--clr-accent, #8b7bff);
+      animation: sidebar-logo-glow 3.4s ease-in-out infinite;
+    }
+    @keyframes sidebar-logo-glow {
+      0%, 100% { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--clr-accent, #8b7bff) 45%, transparent)); }
+      50%      { filter: drop-shadow(0 0 12px color-mix(in srgb, var(--clr-accent, #8b7bff) 85%, transparent)); }
     }
 
     .sidebar-title-group {
