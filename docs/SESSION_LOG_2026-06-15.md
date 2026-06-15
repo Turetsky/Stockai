@@ -39,10 +39,10 @@ project needs a redo"; ended with web + backend + app all shipped.
   project stockai-75833731-f9741).
 
 ## Carryovers (next session)
-- **#37 (WIP, UNCOMMITTED)**: Settings voice change not picked up until restart.
-  flutter's in-progress fix is in `stockai/lib/screens/chat_screen.dart` (refactor to
-  `_loadTtsSettings()` re-read) — looked mid-edit (possible recursive call); FINISH +
-  `flutter analyze` + test before committing.
+- **#36/#37 — DONE + committed** (`f8e9e14`): Settings voice change now live-refreshes
+  before each spoken reply (`_loadTtsSettings()`), no restart needed. NOTE: committed +
+  pushed but NOT yet in a distributed APK (phone has bdc232e / release 6e8e0aviqb630) —
+  ships in the next `flutter build`.
 - **#35**: byte-identical per-preset theme parity — adopt web's 7 preset surface sets in
   the app (site has the values). Kept 2-stop gradient (locked).
 - Web custom "link end to start" mode for app↔web custom-color parity (site, optional).
