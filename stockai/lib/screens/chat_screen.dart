@@ -325,12 +325,40 @@ class _ChatScreenState extends State<ChatScreen> {
         MaterialPageRoute(builder: (_) => const LoginScreen()),
         (_) => false,
       );
+    } else if (_isOfflineError(e)) {
+      // Network drop: supabase/gotrue surfaces this as a raw
+      // AuthRetryableFetchException (or a SocketException/ClientException).
+      // Show a friendly bubble instead of the raw exception text.
+      setState(() {
+        _messages.add(ChatMessage(
+            text: "You're offline. Check your internet connection and try "
+                'again.',
+            isUser: false,
+            isError: true));
+      });
     } else {
       setState(() {
         _messages.add(ChatMessage(
             text: 'Error: ${e.toString()}', isUser: false, isError: true));
       });
     }
+  }
+
+  /// True when [e] is a connectivity failure rather than a real server/app
+  /// error — covers gotrue's AuthRetryableFetchException, dart:io
+  /// SocketException, and http ClientException (all raised on a dropped or
+  /// absent network).
+  bool _isOfflineError(Object e) {
+    final s = e.toString().toLowerCase();
+    return s.contains('authretryablefetchexception') ||
+        s.contains('socketexception') ||
+        s.contains('clientexception') ||
+        s.contains('failed host lookup') ||
+        s.contains('network is unreachable') ||
+        s.contains('connection closed') ||
+        s.contains('connection refused') ||
+        s.contains('connection reset') ||
+        s.contains('connection timed out');
   }
 
   /// Maps a raw tool name to a friendly "working…" chip label.

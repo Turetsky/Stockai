@@ -49,10 +49,31 @@ class ApiService {
       return token;
     } catch (e) {
       if (e is SessionExpiredException) rethrow;
-      // AuthApiException with refresh_token_not_found or similar
+      // A network drop surfaces here as AuthRetryableFetchException /
+      // SocketException. Don't sign the user out over a connectivity blip —
+      // rethrow so the caller can show a friendly "you're offline" message and
+      // let them retry once back online.
+      if (_isNetworkError(e)) rethrow;
+      // Genuine auth failure (AuthApiException: refresh_token_not_found etc.) —
+      // the session really is dead, so force re-login.
       await _supabase.auth.signOut();
       throw SessionExpiredException();
     }
+  }
+
+  /// Whether [e] represents a connectivity failure (offline) rather than an
+  /// auth/server error — used to avoid signing the user out on a network blip.
+  bool _isNetworkError(Object e) {
+    final s = e.toString().toLowerCase();
+    return s.contains('authretryablefetchexception') ||
+        s.contains('socketexception') ||
+        s.contains('clientexception') ||
+        s.contains('failed host lookup') ||
+        s.contains('network is unreachable') ||
+        s.contains('connection closed') ||
+        s.contains('connection refused') ||
+        s.contains('connection reset') ||
+        s.contains('connection timed out');
   }
 
   Future<String> sendMessage(

@@ -137,16 +137,20 @@ ThemeData _buildTheme(
       useMaterial3: true,
     );
   }
-  // "Midnight Violet" dark brand baseline (shared with the web app). Uses the
-  // exact brand palette; light-authored bg/card overrides are intentionally
-  // NOT applied here (see white-header fix) so the brand renders consistently.
-  const darkSurface = AppStyle.brandBg; // #07070E
-  const darkPanel = AppStyle.brandSurface; // #0D0D18
+  // Dark baseline is now DERIVED from the user's seed (theme-dynamic, #26):
+  // the near-black canvas + panels carry the active theme's hue instead of a
+  // fixed violet-black, so every preset gets a cohesive premium dark look.
+  // This also resolves #16 — the "custom dark surface colors" are the
+  // seed-tinted surfaces; the global light-authored bg/card overrides are still
+  // intentionally NOT applied in dark (see white-header fix). True per-mode
+  // dark overrides would need separate keys (dark_bg_color/dark_card_color).
+  final darkSurface = AppStyle.darkBg(seedColor);
+  final darkPanel = AppStyle.darkPanel(seedColor);
   final darkElevated = Color.lerp(darkPanel, Colors.white, 0.05)!;
   return ThemeData(
     colorScheme: scheme.copyWith(
       surface: darkSurface,
-      surfaceContainerLowest: const Color(0xFF050509),
+      surfaceContainerLowest: Color.lerp(darkSurface, Colors.black, 0.45)!,
       surfaceContainerLow: darkPanel,
       surfaceContainer: darkPanel,
       surfaceContainerHigh: darkElevated,

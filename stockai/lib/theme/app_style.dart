@@ -10,14 +10,15 @@ import 'package:flutter/material.dart';
 class AppStyle {
   AppStyle._();
 
-  // ── Midnight Violet brand palette (shared with the web app) ──
-  static const Color brandBg = Color(0xFF07070E); // page background
-  static const Color brandSurface = Color(0xFF0D0D18); // cards / panels
-  static const Color brandAccent = Color(0xFF8B7BFF); // primary accent
-  static const Color brandMid = Color(0xFFB06AD6); // gradient mid stop
-  static const Color brandEnd = Color(0xFF667EEA); // gradient end stop
-  static const Color textPrimary = Color(0xFFECEDF6);
-  static const Color textSecondary = Color(0xFF9A9BB4);
+  // ── Reference palette ──
+  // These are the *default-seed* (Midnight Violet) reference values, kept only
+  // as the fallback seed and as the neutral dark text ramp. Everything visual
+  // (gradients, surfaces, glass, glow) is now DERIVED from the active
+  // ColorScheme / user seed below, so the premium look adapts to ANY preset
+  // instead of always reading as fixed violet.
+  static const Color brandAccent = Color(0xFF8B7BFF); // default seed color
+  static const Color textPrimary = Color(0xFFECEDF6); // dark-mode primary text
+  static const Color textSecondary = Color(0xFF9A9BB4); // dark-mode secondary
   static const Color textFaint = Color(0xFF8A8BA2);
   // Status colors
   static const Color ok = Color(0xFF4ADE80);
@@ -34,14 +35,59 @@ class AppStyle {
   static const Duration fast = Duration(milliseconds: 180);
   static const Duration med = Duration(milliseconds: 280);
 
-  /// The Midnight Violet brand gradient (~110°): accent → mid → indigo.
-  /// Anchored on the scheme's primary so a custom seed still leads, falling
-  /// through the brand mid/end stops.
-  static LinearGradient accentGradient(ColorScheme s) => LinearGradient(
-        begin: const Alignment(-0.8, -1),
-        end: const Alignment(0.8, 1),
-        colors: [s.primary, brandMid, brandEnd],
-      );
+  /// The signature accent gradient (~110°), fully DERIVED from the active
+  /// scheme. The lead stop is `scheme.primary`; the mid/end stops are the
+  /// primary hue rotated a touch warm then cool, so any seed yields a rich,
+  /// harmonious three-stop sweep (the default violet seed reproduces the old
+  /// accent→magenta→indigo Midnight Violet look automatically).
+  ///
+  /// Stop mapping (shared contract with the web app, see site teammate):
+  ///   stop 0 = primary
+  ///   stop 1 = hue +26°,  sat ×0.90,  light +0.04
+  ///   stop 2 = hue −24°,  sat ×0.85,  light −0.02
+  static LinearGradient accentGradient(ColorScheme s) {
+    final base = HSLColor.fromColor(s.primary);
+    final mid = base
+        .withHue((base.hue + 26) % 360)
+        .withSaturation((base.saturation * 0.90).clamp(0.45, 1.0))
+        .withLightness((base.lightness + 0.04).clamp(0.0, 0.85))
+        .toColor();
+    final end = base
+        .withHue((base.hue - 24 + 360) % 360)
+        .withSaturation((base.saturation * 0.85).clamp(0.40, 1.0))
+        .withLightness((base.lightness - 0.02).clamp(0.0, 0.85))
+        .toColor();
+    return LinearGradient(
+      begin: const Alignment(-0.8, -1),
+      end: const Alignment(0.8, 1),
+      colors: [s.primary, mid, end],
+    );
+  }
+
+  /// Near-black page background, tinted by the user's seed hue so the dark
+  /// canvas belongs to the active theme instead of a fixed violet-black.
+  /// Replaces the old hardcoded `brandBg` (#07070E).
+  static Color darkBg(Color seed) {
+    final hsl = HSLColor.fromColor(seed);
+    return HSLColor.fromAHSL(
+      1,
+      hsl.hue,
+      (hsl.saturation * 0.55).clamp(0.14, 0.50),
+      0.045,
+    ).toColor();
+  }
+
+  /// Slightly lifted panel/card surface for dark mode, same seed tint as
+  /// [darkBg]. Replaces the old hardcoded `brandSurface` (#0D0D18).
+  static Color darkPanel(Color seed) {
+    final hsl = HSLColor.fromColor(seed);
+    return HSLColor.fromAHSL(
+      1,
+      hsl.hue,
+      (hsl.saturation * 0.42).clamp(0.10, 0.40),
+      0.085,
+    ).toColor();
+  }
 
   /// Hairline border color appropriate to the active brightness.
   static Color hairline(ColorScheme s) => s.brightness == Brightness.dark
