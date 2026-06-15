@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'models/theme_settings.dart';
 import 'services/supabase_service.dart';
 import 'screens/splash_screen.dart';
+import 'theme/app_style.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,7 +27,7 @@ Future<void> loadThemeFromSupabase() async {
   try {
     final settings = await SupabaseService().getUiSettings();
 
-    Color seedColor = const Color(0xFF667eea);
+    Color seedColor = AppStyle.brandAccent; // Midnight Violet default
     ThemeMode mode = ThemeMode.system;
     final customColors = <String, Color>{};
     var customPresets = <CustomPreset>[];
@@ -136,19 +137,32 @@ ThemeData _buildTheme(
       useMaterial3: true,
     );
   }
+  // "Midnight Violet" dark brand baseline (shared with the web app). Uses the
+  // exact brand palette; light-authored bg/card overrides are intentionally
+  // NOT applied here (see white-header fix) so the brand renders consistently.
+  const darkSurface = AppStyle.brandBg; // #07070E
+  const darkPanel = AppStyle.brandSurface; // #0D0D18
+  final darkElevated = Color.lerp(darkPanel, Colors.white, 0.05)!;
   return ThemeData(
     colorScheme: scheme.copyWith(
-      // NOTE: do NOT apply the light-authored card_color/bg_color overrides to
-      // the dark theme — they are white/near-white and produce white surfaces
-      // on a dark body (e.g. a scrolled-under AppBar). Dark mode uses the
-      // seed-derived dark surfaces; only the (mode-agnostic) accent carries over.
+      surface: darkSurface,
+      surfaceContainerLowest: const Color(0xFF050509),
+      surfaceContainerLow: darkPanel,
+      surfaceContainer: darkPanel,
+      surfaceContainerHigh: darkElevated,
+      surfaceContainerHighest: darkElevated,
+      onSurface: AppStyle.textPrimary,
+      onSurfaceVariant: AppStyle.textSecondary,
+      outline: Colors.white.withValues(alpha: 0.12),
+      outlineVariant: Colors.white.withValues(alpha: 0.08),
       secondary: accentOverride,
       tertiary: accentOverride != null
           ? Color.lerp(accentOverride, Colors.black, 0.2)
           : null,
     ),
+    scaffoldBackgroundColor: darkSurface,
     appBarTheme: AppBarTheme(
-      backgroundColor: scheme.surface,
+      backgroundColor: darkSurface,
       surfaceTintColor: Colors.transparent,
       scrolledUnderElevation: 0,
       systemOverlayStyle: const SystemUiOverlayStyle(

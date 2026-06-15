@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart';
+import '../theme/app_style.dart';
 import 'chat_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -78,11 +79,15 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_confirmationSent) {
       return Scaffold(
         body: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+              colors: [
+                theme.colorScheme.surface,
+                Color.lerp(theme.colorScheme.surface,
+                    theme.colorScheme.primary, 0.28)!,
+              ],
             ),
           ),
           child: Center(
@@ -122,11 +127,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+            colors: [
+              theme.colorScheme.surface,
+              Color.lerp(theme.colorScheme.surface, theme.colorScheme.primary,
+                  0.28)!,
+            ],
           ),
         ),
         child: Center(
@@ -146,14 +155,23 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: CustomPaint(painter: _CubeLogoPainter(color: theme.colorScheme.primary)),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      'StockAI',
-                      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    ShaderMask(
+                      shaderCallback: (rect) =>
+                          AppStyle.accentGradient(theme.colorScheme)
+                              .createShader(rect),
+                      child: Text(
+                        'StockAI',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.5),
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       _isLogin ? 'Sign in to continue' : 'Create your account',
-                      style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey),
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: 24),
 
@@ -207,12 +225,37 @@ class _LoginScreenState extends State<LoginScreen> {
 
                     SizedBox(
                       width: double.infinity,
-                      height: 48,
-                      child: FilledButton(
-                        onPressed: _loading ? null : _handleAuth,
-                        child: _loading
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : Text(_isLogin ? 'Sign In' : 'Create Account'),
+                      height: 50,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: AppStyle.accentGradient(theme.colorScheme),
+                          borderRadius: BorderRadius.circular(AppStyle.rPill),
+                          boxShadow: [
+                            BoxShadow(
+                              color: theme.colorScheme.primary
+                                  .withValues(alpha: 0.35),
+                              blurRadius: 16,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(AppStyle.rPill)),
+                          ),
+                          onPressed: _loading ? null : _handleAuth,
+                          child: _loading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white))
+                              : Text(_isLogin ? 'Sign In' : 'Create Account'),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),

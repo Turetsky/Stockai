@@ -51,7 +51,7 @@ class ThemeSettings {
   final Map<String, Color> customColors;
 
   const ThemeSettings({
-    this.seedColor = const Color(0xFF667eea),
+    this.seedColor = const Color(0xFF8B7BFF), // Midnight Violet accent
     this.mode = ThemeMode.system,
     this.customColors = const {},
   });

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../main.dart';
+import '../theme/app_style.dart';
 import '../services/api_service.dart';
 import '../services/supabase_service.dart';
 import 'login_screen.dart';
@@ -449,7 +450,27 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  /// Opens the create-category flow directly (same sheet "Manage Categories"
+  /// uses for "+ New Category"), so it's reachable in one tap from the drawer.
+  void _showNewCategorySheet() {
+    Navigator.pop(context); // close drawer
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _NewCategorySheet(
+        onCreated: (name, icon) async {
+          await _apiService.createCategory(name, icon);
+          setState(() => _loadCategories());
+        },
+      ),
+    );
+  }
+
   Widget _buildDrawer() {
+    final scheme = Theme.of(context).colorScheme;
     return Drawer(
       child: Column(
         children: [
@@ -516,6 +537,29 @@ class _ChatScreenState extends State<ChatScreen> {
                   ],
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 8, 2),
+                child: Row(
+                  children: [
+                    Text(
+                      'CATEGORIES',
+                      style: TextStyle(
+                        fontSize: 11,
+                        letterSpacing: 1.2,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.add, size: 20),
+                      tooltip: 'New category',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _showNewCategorySheet,
+                    ),
+                  ],
+                ),
+              ),
               Expanded(
                 child: FutureBuilder<List<Map<String, dynamic>>>(
                   future: _categoriesFuture,
@@ -569,6 +613,13 @@ class _ChatScreenState extends State<ChatScreen> {
                   },
                 ),
               ),
+              ListTile(
+                leading: Icon(Icons.add_circle_outline, color: scheme.primary),
+                title: Text('New Category',
+                    style: TextStyle(
+                        color: scheme.primary, fontWeight: FontWeight.w600)),
+                onTap: _showNewCategorySheet,
+              ),
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.category),
@@ -613,9 +664,21 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       drawer: _buildDrawer(),
       appBar: AppBar(
-        title: const Text('StockAI'),
+        title: ShaderMask(
+          shaderCallback: (rect) =>
+              AppStyle.accentGradient(theme.colorScheme).createShader(rect),
+          child: const Text(
+            'StockAI',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 20,
+              letterSpacing: 0.5,
+              color: Colors.white,
+            ),
+          ),
+        ),
         centerTitle: true,
-        elevation: 1,
+        elevation: 0,
         actions: [
           Theme(
             data: theme.copyWith(
@@ -668,7 +731,12 @@ class _ChatScreenState extends State<ChatScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(
+      body: Stack(
+        children: [
+          // Soft accent glow behind the conversation for depth.
+          const AccentGlow(
+              alignment: Alignment.topCenter, radius: 260, opacity: 0.16),
+          Column(
         children: [
           Expanded(
             child: ListView.builder(
@@ -686,14 +754,11 @@ class _ChatScreenState extends State<ChatScreen> {
           Container(
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, -2))
-              ],
+              border: Border(
+                top: BorderSide(color: AppStyle.hairline(theme.colorScheme)),
+              ),
             ),
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 16),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
             child: SafeArea(
               top: false,
               child: Row(
@@ -723,15 +788,22 @@ class _ChatScreenState extends State<ChatScreen> {
                       focusNode: _inputFocusNode,
                       decoration: InputDecoration(
                         hintText: _isListening
-                            ? 'Listening...'
-                            : 'Ask me anything about your inventory...',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24)),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
+                            ? 'Listening…'
+                            : 'Ask me anything about your inventory…',
                         filled: true,
-                        fillColor: theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.3),
+                        fillColor: AppStyle.glassFill(theme.colorScheme),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 14),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppStyle.rPill),
+                          borderSide: BorderSide(
+                              color: AppStyle.hairline(theme.colorScheme)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppStyle.rPill),
+                          borderSide: BorderSide(
+                              color: theme.colorScheme.primary, width: 1.5),
+                        ),
                       ),
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) => _sendMessage(),
@@ -739,27 +811,55 @@ class _ChatScreenState extends State<ChatScreen> {
                       minLines: 1,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  if (_isSpeaking || (_sending && _streamSub != null))
-                    IconButton.filled(
-                      onPressed: _isSpeaking ? _stopSpeaking : _stopStreaming,
-                      style: IconButton.styleFrom(
-                        backgroundColor: theme.colorScheme.error,
-                        foregroundColor: theme.colorScheme.onError,
-                      ),
-                      icon: const Icon(Icons.stop_rounded),
-                      tooltip: _isSpeaking ? 'Stop speaking' : 'Stop',
-                    )
-                  else
-                    IconButton.filled(
-                      onPressed: _sending ? null : _sendMessage,
-                      icon: const Icon(Icons.send),
-                    ),
+                  const SizedBox(width: 10),
+                  _buildSendButton(theme),
                 ],
               ),
             ),
           ),
         ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Circular send button (accent gradient) that becomes a stop button while
+  /// speaking or streaming.
+  Widget _buildSendButton(ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final isStop = _isSpeaking || (_sending && _streamSub != null);
+    if (isStop) {
+      return Container(
+        decoration: BoxDecoration(color: scheme.error, shape: BoxShape.circle),
+        child: IconButton(
+          onPressed: _isSpeaking ? _stopSpeaking : _stopStreaming,
+          icon: Icon(Icons.stop_rounded, color: scheme.onError),
+          tooltip: _isSpeaking ? 'Stop speaking' : 'Stop',
+        ),
+      );
+    }
+    final enabled = !_sending;
+    return AnimatedOpacity(
+      duration: AppStyle.fast,
+      opacity: enabled ? 1 : 0.45,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: AppStyle.accentGradient(scheme),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: scheme.primary.withValues(alpha: 0.35),
+              blurRadius: 14,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: IconButton(
+          onPressed: enabled ? _sendMessage : null,
+          icon: Icon(Icons.arrow_upward_rounded, color: scheme.onPrimary),
+          tooltip: 'Send',
+        ),
       ),
     );
   }
@@ -825,36 +925,66 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageBubble(ChatMessage msg, ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final radius = BorderRadius.only(
+      topLeft: const Radius.circular(AppStyle.rBubble),
+      topRight: const Radius.circular(AppStyle.rBubble),
+      bottomLeft: Radius.circular(msg.isUser ? AppStyle.rBubble : 6),
+      bottomRight: Radius.circular(msg.isUser ? 6 : AppStyle.rBubble),
+    );
+
+    final BoxDecoration decoration;
+    final Color textColor;
+    if (msg.isError) {
+      decoration = BoxDecoration(
+        color: scheme.errorContainer,
+        borderRadius: radius,
+        border: Border.all(color: scheme.error.withValues(alpha: 0.4)),
+      );
+      textColor = scheme.onErrorContainer;
+    } else if (msg.isUser) {
+      // Sent bubble — accent gradient with a soft glow.
+      decoration = BoxDecoration(
+        gradient: AppStyle.accentGradient(scheme),
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withValues(alpha: 0.30),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      );
+      textColor = scheme.onPrimary;
+    } else {
+      // Assistant bubble — glass panel with hairline border.
+      decoration = BoxDecoration(
+        color: AppStyle.glassFill(scheme),
+        borderRadius: radius,
+        border: Border.all(color: AppStyle.hairline(scheme)),
+      );
+      textColor = scheme.onSurface;
+    }
+
     return Align(
       alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        constraints:
-            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
-        decoration: BoxDecoration(
-          color: msg.isError
-              ? Colors.red.shade50
-              : msg.isUser
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(msg.isUser ? 16 : 4),
-            bottomRight: Radius.circular(msg.isUser ? 4 : 16),
-          ),
+      child: TweenAnimationBuilder<double>(
+        duration: AppStyle.med,
+        curve: Curves.easeOutCubic,
+        tween: Tween(begin: 0, end: 1),
+        builder: (context, t, child) => Opacity(
+          opacity: t,
+          child: Transform.translate(offset: Offset(0, (1 - t) * 8), child: child),
         ),
-        child: Text(
-          msg.text,
-          style: TextStyle(
-            color: msg.isError
-                ? Colors.red.shade700
-                : msg.isUser
-                    ? theme.colorScheme.onPrimary
-                    : theme.colorScheme.onSurface,
-            fontSize: 15,
-            height: 1.4,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          constraints:
+              BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
+          decoration: decoration,
+          child: Text(
+            msg.text,
+            style: TextStyle(color: textColor, fontSize: 15, height: 1.42),
           ),
         ),
       ),

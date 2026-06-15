@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart';
+import '../theme/app_style.dart';
 import 'chat_screen.dart';
 import 'login_screen.dart';
 
@@ -54,55 +55,68 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: scheme.surface,
-      body: Center(
-        child: FadeTransition(
-          opacity: _fadeIn,
-          child: ScaleTransition(
-            scale: _scale,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 96,
-                  height: 96,
-                  child: CustomPaint(painter: _SplashCubePainter(color: scheme.primary)),
+      body: Stack(
+        children: [
+          const AccentGlow(
+              alignment: Alignment.center, radius: 280, opacity: 0.20),
+          Center(
+            child: FadeTransition(
+              opacity: _fadeIn,
+              child: ScaleTransition(
+                scale: _scale,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 96,
+                      height: 96,
+                      child: CustomPaint(
+                        painter: _SplashCubePainter(
+                            gradient: AppStyle.accentGradient(scheme)),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ShaderMask(
+                      shaderCallback: (rect) =>
+                          AppStyle.accentGradient(scheme).createShader(rect),
+                      child: const Text(
+                        'StockAI',
+                        style: TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.5,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'The database that builds itself.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: scheme.onSurface.withValues(alpha: 0.55),
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 20),
-                Text(
-                  'StockAI',
-                  style: TextStyle(
-                    fontSize: 36,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
-                    color: scheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'The database that builds itself.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: scheme.onSurface.withValues(alpha: 0.55),
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
 class _SplashCubePainter extends CustomPainter {
-  final Color color;
-  const _SplashCubePainter({required this.color});
+  final Gradient gradient;
+  const _SplashCubePainter({required this.gradient});
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = color
+      ..shader = gradient.createShader(Offset.zero & size)
       ..strokeWidth = size.width * 0.055
       ..style = PaintingStyle.stroke
       ..strokeJoin = StrokeJoin.round
@@ -132,5 +146,5 @@ class _SplashCubePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SplashCubePainter old) => old.color != color;
+  bool shouldRepaint(_SplashCubePainter old) => old.gradient != gradient;
 }
