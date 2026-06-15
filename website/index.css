@@ -20,7 +20,12 @@
   --d-faint:   #8a8ba2;
   --d-violet:  var(--clr-accent, #8b7bff);
   --d-cyan:    #59d6e6;
-  --d-grad:    linear-gradient(110deg, var(--clr-start, #8b7bff) 0%, var(--clr-end, #667eea) 100%);
+  /* gradient stops + a derived midpoint, so the atmospheric blooms below
+     re-tint with the active theme instead of being hardcoded violet */
+  --d-start:   var(--clr-start, #8b7bff);
+  --d-end:     var(--clr-end, #667eea);
+  --d-mid:     color-mix(in srgb, var(--clr-start, #8b7bff), var(--clr-end, #667eea));
+  --d-grad:    linear-gradient(110deg, var(--d-start) 0%, var(--d-end) 100%);
   --d-display: "Bricolage Grotesque", Georgia, serif;
   --d-body:    "Manrope", -apple-system, BlinkMacSystemFont, sans-serif;
   --d-mono:    "JetBrains Mono", ui-monospace, monospace;
@@ -38,9 +43,9 @@ body::before {
   inset: 0;
   z-index: -2;
   background:
-    radial-gradient(50% 45% at 20% 0%,  rgba(139,123,255,0.22), transparent 60%),
-    radial-gradient(45% 45% at 95% 5%,  rgba(176,106,214,0.16), transparent 60%),
-    radial-gradient(60% 55% at 85% 100%, rgba(102,126,234,0.16), transparent 60%),
+    radial-gradient(50% 45% at 20% 0%,  color-mix(in srgb, var(--d-start) 22%, transparent), transparent 60%),
+    radial-gradient(45% 45% at 95% 5%,  color-mix(in srgb, var(--d-mid) 16%, transparent), transparent 60%),
+    radial-gradient(60% 55% at 85% 100%, color-mix(in srgb, var(--d-end) 16%, transparent), transparent 60%),
     var(--d-ink);
 }
 body::after {
@@ -123,8 +128,8 @@ body::after {
   margin-bottom: 20px;
   overflow: hidden;
   background:
-    radial-gradient(120% 160% at 0% 0%, rgba(139,123,255,0.18), transparent 55%),
-    radial-gradient(120% 160% at 100% 0%, rgba(102,126,234,0.14), transparent 55%),
+    radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--d-start) 18%, transparent), transparent 55%),
+    radial-gradient(120% 160% at 100% 0%, color-mix(in srgb, var(--d-end) 14%, transparent), transparent 55%),
     linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
 }
 .ai-hero-label {
@@ -289,7 +294,7 @@ body::after {
 .inventory-card::before {
   content: "";
   position: absolute; inset: 0;
-  background: radial-gradient(120% 90% at 100% 0%, rgba(139,123,255,0.14), transparent 55%);
+  background: radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--d-start) 14%, transparent), transparent 55%);
   opacity: 0;
   transition: opacity 0.25s ease;
 }

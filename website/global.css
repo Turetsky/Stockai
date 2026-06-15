@@ -34,6 +34,8 @@ body {
     color: var(--clr-text-primary);
     font-size: var(--font-base);
     line-height: 1.5;
+    /* Zoom the whole UI in a touch so content reads larger/denser. */
+    zoom: 1.08;
     opacity: 0;
     transition: opacity 0.15s ease;
 }
