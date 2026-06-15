@@ -10,16 +10,51 @@ import 'package:flutter/material.dart';
 class AppStyle {
   AppStyle._();
 
-  // ── Reference palette ──
-  // These are the *default-seed* (Midnight Violet) reference values, kept only
-  // as the fallback seed and as the neutral dark text ramp. Everything visual
-  // (gradients, surfaces, glass, glow) is now DERIVED from the active
-  // ColorScheme / user seed below, so the premium look adapts to ANY preset
-  // instead of always reading as fixed violet.
+  // ── Midnight Violet dark baseline (shared with the web app) ──
+  // The dark canvas/panels stay MV by default (web keeps these fixed too: the
+  // decorative mesh is hardcoded, glass is theme-neutral white-alpha). The
+  // THEME-DYNAMIC piece is the accent gradient (below), which mirrors web's
+  // --clr-start / --clr-end exactly.
+  static const Color brandBg = Color(0xFF07070E); // page background (dark)
+  static const Color brandSurface = Color(0xFF0D0D18); // cards / panels (dark)
   static const Color brandAccent = Color(0xFF8B7BFF); // default seed color
   static const Color textPrimary = Color(0xFFECEDF6); // dark-mode primary text
   static const Color textSecondary = Color(0xFF9A9BB4); // dark-mode secondary
   static const Color textFaint = Color(0xFF8A8BA2);
+
+  // ── Accent gradient stops (theme-dynamic, web-parity) ──
+  // Mirrors the web app-screens' `--clr-start` / `--clr-end`. Defaults are the
+  // literal CSS defaults so a brand-new user (no ui_settings) matches web
+  // pixel-for-pixel. `main.dart` syncs these from the active ThemeSettings
+  // (sourced from the `primary_color_start` / `primary_color_end` keys) before
+  // building the themes, so every `accentGradient` call site re-tints with no
+  // per-site change.
+  static const Color gradientStartDefault = Color(0xFF8B7BFF); // --clr-start
+  static const Color gradientEndDefault = Color(0xFF667EEA); // --clr-end
+  static Color gradientStart = gradientStartDefault;
+  static Color gradientEnd = gradientEndDefault;
+
+  /// INTERIM companion-stop derivation for app-side seed/preset changes.
+  ///
+  /// The app's Settings has a single "Primary" picker, but the gradient needs
+  /// two stops. This derives the END stop from a chosen START using the same
+  /// relationship the default pair has (#8B7BFF → #667EEA): hue −18°, sat ×0.80,
+  /// lightness ×0.90. Returns the literal #667EEA default when given the default
+  /// start, so the no-change case stays pixel-identical to web.
+  ///
+  /// TODO(parity): replace with web's exact per-preset start/end pairs +
+  /// custom-edit formula once site confirms, so app writes match web writes.
+  static Color deriveGradientEnd(Color start) {
+    if (start.toARGB32() == gradientStartDefault.toARGB32()) {
+      return gradientEndDefault;
+    }
+    final hsl = HSLColor.fromColor(start);
+    return hsl
+        .withHue((hsl.hue - 18 + 360) % 360)
+        .withSaturation((hsl.saturation * 0.80).clamp(0.0, 1.0))
+        .withLightness((hsl.lightness * 0.90).clamp(0.0, 1.0))
+        .toColor();
+  }
   // Status colors
   static const Color ok = Color(0xFF4ADE80);
   static const Color lowStock = Color(0xFFFB7185);
@@ -35,59 +70,18 @@ class AppStyle {
   static const Duration fast = Duration(milliseconds: 180);
   static const Duration med = Duration(milliseconds: 280);
 
-  /// The signature accent gradient (~110°), fully DERIVED from the active
-  /// scheme. The lead stop is `scheme.primary`; the mid/end stops are the
-  /// primary hue rotated a touch warm then cool, so any seed yields a rich,
-  /// harmonious three-stop sweep (the default violet seed reproduces the old
-  /// accent→magenta→indigo Midnight Violet look automatically).
+  /// The signature accent gradient — THEME-DYNAMIC, mirroring the web
+  /// app-screens. Two stops (`gradientStart` 0% → `gradientEnd` 100%) on a 110°
+  /// diagonal, matching CSS `linear-gradient(110deg, START 0%, END 100%)`.
+  /// The `s` parameter is retained so existing `accentGradient(scheme)` call
+  /// sites are untouched; the stops come from the synced theme colors.
   ///
-  /// Stop mapping (shared contract with the web app, see site teammate):
-  ///   stop 0 = primary
-  ///   stop 1 = hue +26°,  sat ×0.90,  light +0.04
-  ///   stop 2 = hue −24°,  sat ×0.85,  light −0.02
-  static LinearGradient accentGradient(ColorScheme s) {
-    final base = HSLColor.fromColor(s.primary);
-    final mid = base
-        .withHue((base.hue + 26) % 360)
-        .withSaturation((base.saturation * 0.90).clamp(0.45, 1.0))
-        .withLightness((base.lightness + 0.04).clamp(0.0, 0.85))
-        .toColor();
-    final end = base
-        .withHue((base.hue - 24 + 360) % 360)
-        .withSaturation((base.saturation * 0.85).clamp(0.40, 1.0))
-        .withLightness((base.lightness - 0.02).clamp(0.0, 0.85))
-        .toColor();
-    return LinearGradient(
-      begin: const Alignment(-0.8, -1),
-      end: const Alignment(0.8, 1),
-      colors: [s.primary, mid, end],
-    );
-  }
-
-  /// Near-black page background, tinted by the user's seed hue so the dark
-  /// canvas belongs to the active theme instead of a fixed violet-black.
-  /// Replaces the old hardcoded `brandBg` (#07070E).
-  static Color darkBg(Color seed) {
-    final hsl = HSLColor.fromColor(seed);
-    return HSLColor.fromAHSL(
-      1,
-      hsl.hue,
-      (hsl.saturation * 0.55).clamp(0.14, 0.50),
-      0.045,
-    ).toColor();
-  }
-
-  /// Slightly lifted panel/card surface for dark mode, same seed tint as
-  /// [darkBg]. Replaces the old hardcoded `brandSurface` (#0D0D18).
-  static Color darkPanel(Color seed) {
-    final hsl = HSLColor.fromColor(seed);
-    return HSLColor.fromAHSL(
-      1,
-      hsl.hue,
-      (hsl.saturation * 0.42).clamp(0.10, 0.40),
-      0.085,
-    ).toColor();
-  }
+  /// 110° → Flutter alignment: begin (-1.0, -0.36) → end (1.0, 0.36).
+  static LinearGradient accentGradient(ColorScheme s) => LinearGradient(
+        begin: const Alignment(-1.0, -0.36),
+        end: const Alignment(1.0, 0.36),
+        colors: [gradientStart, gradientEnd],
+      );
 
   /// Hairline border color appropriate to the active brightness.
   static Color hairline(ColorScheme s) => s.brightness == Brightness.dark

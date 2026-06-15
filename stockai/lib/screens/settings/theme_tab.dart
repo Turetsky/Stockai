@@ -35,12 +35,24 @@ class _ThemeTabState extends State<_ThemeTab> {
   }
 
   Future<void> _setSeedColor(Color color) async {
-    themeNotifier.value = themeNotifier.value.copyWith(seedColor: color);
-    final hex = '#${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
+    // The seed drives the theme-dynamic accent gradient: START = seed,
+    // END = derived companion (web parity, see AppStyle.deriveGradientEnd).
+    // Persist all three keys + update in-memory so the gradient re-tints live.
+    final gradEnd = AppStyle.deriveGradientEnd(color);
+    themeNotifier.value = themeNotifier.value.copyWith(
+      seedColor: color,
+      gradientStart: color,
+      gradientEnd: gradEnd,
+    );
     try {
-      await _supabaseService.setUiSetting('theme_color', hex);
+      await _supabaseService.setUiSetting('theme_color', _hex(color));
+      await _supabaseService.setUiSetting('primary_color_start', _hex(color));
+      await _supabaseService.setUiSetting('primary_color_end', _hex(gradEnd));
     } catch (_) {}
   }
+
+  static String _hex(Color c) =>
+      '#${c.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
 
   Future<void> _setCustomColor(String key, Color? color) async {
     final current = themeNotifier.value;
@@ -95,14 +107,19 @@ class _ThemeTabState extends State<_ThemeTab> {
   }
 
   Future<void> _loadPreset(CustomPreset preset) async {
+    final gradEnd = AppStyle.deriveGradientEnd(preset.seedColor);
     themeNotifier.value = ThemeSettings(
       seedColor: preset.seedColor,
       mode: themeNotifier.value.mode,
       customColors: Map<String, Color>.from(preset.customColors),
+      gradientStart: preset.seedColor,
+      gradientEnd: gradEnd,
     );
-    final hex = '#${preset.seedColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
+    final hex = _hex(preset.seedColor);
     try {
       await _supabaseService.setUiSetting('theme_color', hex);
+      await _supabaseService.setUiSetting('primary_color_start', hex);
+      await _supabaseService.setUiSetting('primary_color_end', _hex(gradEnd));
       const keyMap = {
         'background': 'bg_color',
         'cards': 'card_color',

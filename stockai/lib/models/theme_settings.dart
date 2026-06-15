@@ -50,21 +50,33 @@ class ThemeSettings {
   final ThemeMode mode;
   final Map<String, Color> customColors;
 
+  /// Accent-gradient stops (theme-dynamic, web-parity). Sourced from the
+  /// `primary_color_start` / `primary_color_end` ui_settings keys; default to
+  /// the literal web CSS defaults so a brand-new user matches web exactly.
+  final Color gradientStart;
+  final Color gradientEnd;
+
   const ThemeSettings({
     this.seedColor = const Color(0xFF8B7BFF), // Midnight Violet accent
     this.mode = ThemeMode.system,
     this.customColors = const {},
+    this.gradientStart = const Color(0xFF8B7BFF), // --clr-start default
+    this.gradientEnd = const Color(0xFF667EEA), // --clr-end default
   });
 
   ThemeSettings copyWith({
     Color? seedColor,
     ThemeMode? mode,
     Map<String, Color>? customColors,
+    Color? gradientStart,
+    Color? gradientEnd,
   }) {
     return ThemeSettings(
       seedColor: seedColor ?? this.seedColor,
       mode: mode ?? this.mode,
       customColors: customColors ?? this.customColors,
+      gradientStart: gradientStart ?? this.gradientStart,
+      gradientEnd: gradientEnd ?? this.gradientEnd,
     );
   }
 }

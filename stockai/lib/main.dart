@@ -31,13 +31,28 @@ Future<void> loadThemeFromSupabase() async {
     ThemeMode mode = ThemeMode.system;
     final customColors = <String, Color>{};
     var customPresets = <CustomPreset>[];
+    // Web-parity accent-gradient stops; default to the literal web CSS defaults
+    // so a brand-new user (no rows) matches web pixel-for-pixel.
+    Color gradientStart = AppStyle.gradientStartDefault;
+    Color gradientEnd = AppStyle.gradientEndDefault;
+
+    Color? parseHex(String? raw) {
+      if (raw == null) return null;
+      final hex = raw.replaceAll('#', '');
+      if (hex.length != 6) return null;
+      return Color(int.parse('FF$hex', radix: 16));
+    }
 
     if (settings.containsKey('theme_color')) {
-      final hex = settings['theme_color']!.replaceAll('#', '');
-      if (hex.length == 6) {
-        seedColor = Color(int.parse('FF$hex', radix: 16));
-      }
+      final c = parseHex(settings['theme_color']);
+      if (c != null) seedColor = c;
     }
+
+    // Theme-dynamic gradient stops (mirror web's --clr-start / --clr-end).
+    final startC = parseHex(settings['primary_color_start']);
+    if (startC != null) gradientStart = startC;
+    final endC = parseHex(settings['primary_color_end']);
+    if (endC != null) gradientEnd = endC;
 
     if (settings.containsKey('theme_mode')) {
       switch (settings['theme_mode']) {
@@ -77,6 +92,8 @@ Future<void> loadThemeFromSupabase() async {
       seedColor: seedColor,
       mode: mode,
       customColors: customColors,
+      gradientStart: gradientStart,
+      gradientEnd: gradientEnd,
     );
     customPresetsNotifier.value = customPresets;
   } catch (_) {
@@ -137,16 +154,28 @@ ThemeData _buildTheme(
       useMaterial3: true,
     );
   }
-  // Dark baseline is now DERIVED from the user's seed (theme-dynamic, #26):
-  // the near-black canvas + panels carry the active theme's hue instead of a
-  // fixed violet-black, so every preset gets a cohesive premium dark look.
-  // This also resolves #16 — the "custom dark surface colors" are the
-  // seed-tinted surfaces; the global light-authored bg/card overrides are still
-  // intentionally NOT applied in dark (see white-header fix). True per-mode
-  // dark overrides would need separate keys (dark_bg_color/dark_card_color).
-  final darkSurface = AppStyle.darkBg(seedColor);
-  final darkPanel = AppStyle.darkPanel(seedColor);
+  // Dark canvas stays the Midnight Violet baseline by default (web keeps the
+  // dark surfaces fixed too; only the accent gradient is theme-dynamic). The
+  // accent GRADIENT re-tints per theme via AppStyle.gradientStart/End.
+  //
+  // #16 (custom dark surfaces) is honored SAFELY: a user-picked bg/card is
+  // applied in dark mode ONLY when it is genuinely dark (luminance guard), so
+  // the light-valued pickers that caused the white-header bug fall back to the
+  // brand baseline instead of washing out the UI. The #15 AppBar pin (header =
+  // resolved surface, no scrolled-under tint) is preserved below, and onSurface
+  // is contrast-guarded.
+  final darkSurface =
+      (bgOverride != null && bgOverride.computeLuminance() < 0.22)
+          ? bgOverride
+          : AppStyle.brandBg;
+  final darkPanel =
+      (cardOverride != null && cardOverride.computeLuminance() < 0.28)
+          ? cardOverride
+          : AppStyle.brandSurface;
   final darkElevated = Color.lerp(darkPanel, Colors.white, 0.05)!;
+  final darkOnSurface = darkSurface.computeLuminance() > 0.5
+      ? Colors.black
+      : AppStyle.textPrimary;
   return ThemeData(
     colorScheme: scheme.copyWith(
       surface: darkSurface,
@@ -155,7 +184,7 @@ ThemeData _buildTheme(
       surfaceContainer: darkPanel,
       surfaceContainerHigh: darkElevated,
       surfaceContainerHighest: darkElevated,
-      onSurface: AppStyle.textPrimary,
+      onSurface: darkOnSurface,
       onSurfaceVariant: AppStyle.textSecondary,
       outline: Colors.white.withValues(alpha: 0.12),
       outlineVariant: Colors.white.withValues(alpha: 0.08),
@@ -222,6 +251,11 @@ class InventoryManagerApp extends StatelessWidget {
     return ValueListenableBuilder<ThemeSettings>(
       valueListenable: themeNotifier,
       builder: (context, settings, _) {
+        // Sync the theme-dynamic accent-gradient stops before building the
+        // themes, so every AppStyle.accentGradient() call site re-tints with
+        // the active theme without any per-site change.
+        AppStyle.gradientStart = settings.gradientStart;
+        AppStyle.gradientEnd = settings.gradientEnd;
         return MaterialApp(
           title: 'StockAI',
           debugShowCheckedModeBanner: false,
