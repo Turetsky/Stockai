@@ -378,9 +378,17 @@ BEGIN
 END;
 $$;
 
--- Trigger to clean up user data after a user is deleted from auth.users.
+-- Trigger to clean up user data when a user is deleted from auth.users.
+-- MUST be BEFORE DELETE: the FK ON DELETE CASCADE on table_definitions.user_id
+-- empties table_definitions as part of the delete, and those RI cascade actions run
+-- (as system AFTER triggers) before any user-defined AFTER trigger. If this were
+-- AFTER DELETE, the drop loop below would find table_definitions already empty and
+-- silently drop nothing — orphaning every dynamic item table. BEFORE DELETE reads
+-- table_definitions while it is still populated, drops the tables, then returns OLD
+-- so the delete (and the metadata cascade) proceeds normally.
+DROP TRIGGER IF EXISTS on_auth_user_deleted ON auth.users;
 CREATE TRIGGER on_auth_user_deleted
-  AFTER DELETE ON auth.users
+  BEFORE DELETE ON auth.users
   FOR EACH ROW EXECUTE FUNCTION cleanup_user_data();
 
 
