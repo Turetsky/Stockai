@@ -1124,6 +1124,14 @@ RULES:
 - Be concise. Summarize what changed after each action.
 - To navigate: say "navigate to inventory.html?table=TABLE_NAME"
 
+OUTPUT FORMAT (IMPORTANT — the chat renders RAW TEXT, so Markdown symbols show up literally):
+- Reply in PLAIN TEXT only. Do NOT use Markdown.
+- No **bold**, no *italics*, no __underline__, no \`backticks\` or code fences.
+- No #/##/### headings — just write a plain line (you may end it with a colon).
+- No Markdown pipe tables (| col | col |). For tabular or summary data, use simple
+  "Label: value" lines or short "- " bullet lists instead.
+- Use "- " (hyphen + space) for bullets and a blank line between paragraphs. Nothing else.
+
 CATEGORY CREATION RULES:
 ⚠️ MANDATORY: Every create_category call MUST include AT LEAST 2 fields. Missing either field is a bug.
 - fields[0] MUST be the item identity/name field (field_type: "text", required: true). This is the card title. Example: { field_name: "name", display_name: "Name", field_type: "text", required: true }
