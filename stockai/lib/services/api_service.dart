@@ -12,6 +12,13 @@ class ApiService {
   /// and the app behaves exactly as before. Flip to true to use `streamMessage()`.
   static const bool useStreaming = false;
 
+  /// ElevenLabs TTS key — injected at build time via
+  /// `--dart-define=ELEVENLABS_API_KEY=...`. NEVER hardcode it: the previous
+  /// literal was leaked publicly (GitGuardian) and must stay rotated. Empty in
+  /// dev builds without the define → TTS throws a clear error.
+  static const String _elevenLabsApiKey =
+      String.fromEnvironment('ELEVENLABS_API_KEY');
+
   final _supabase = Supabase.instance.client;
 
   /// Compose the outgoing message text, optionally prepending conversation
@@ -169,13 +176,18 @@ class ApiService {
     double stability = 0.5,
     double similarityBoost = 0.75,
   }) async {
+    if (_elevenLabsApiKey.isEmpty) {
+      throw Exception(
+          'ELEVENLABS_API_KEY not set — pass it at build time via '
+          '--dart-define=ELEVENLABS_API_KEY=<key>.');
+    }
     final request = http.Request(
       'POST',
       Uri.parse(
           'https://api.elevenlabs.io/v1/text-to-speech/$voiceId/stream'),
     );
     request.headers.addAll({
-      'xi-api-key': 'sk_06e876556112608c5c8a65f10e043f544c869786d6df6c60',
+      'xi-api-key': _elevenLabsApiKey,
       'Content-Type': 'application/json',
       'Accept': 'audio/mpeg',
     });
