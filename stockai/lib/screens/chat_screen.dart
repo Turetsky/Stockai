@@ -41,9 +41,13 @@ class _ChatScreenState extends State<ChatScreen> {
   // TTS
   final AudioPlayer _player = AudioPlayer();
   bool _isSpeaking = false;
-  String _ttsVoiceId = '21m00Tcm4TlvDq8ikWAM'; // ElevenLabs Rachel (default)
+  // Default to a free-tier *premade* voice (Sarah). The old default (Rachel,
+  // 21m00…) is a library voice → 402 on free plans. A user's saved tts_voice_id
+  // still overrides this on load.
+  String _ttsVoiceId = 'EXAVITQu4vr4xnSDxMaL'; // ElevenLabs Sarah (premade, free)
   double _ttsStability = 0.5;
   double _ttsSimilarityBoost = 0.75;
+  bool _ttsWarned = false; // show a TTS-failure notice at most once per session
 
   // Drawer state
   late Future<List<Map<String, dynamic>>> _categoriesFuture;
@@ -297,7 +301,18 @@ class _ChatScreenState extends State<ChatScreen> {
           similarityBoost: _ttsSimilarityBoost,
         );
         await _player.play(BytesSource(audio));
-      } catch (_) {}
+      } catch (e) {
+        // Don't fail the reply over voice playback; tell the user once.
+        if (mounted && !_ttsWarned) {
+          _ttsWarned = true;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text(e.toString().replaceFirst('Exception: ', '')),
+            ),
+          );
+        }
+      }
     }
     await loadThemeFromSupabase();
     if (mounted) setState(() => _loadCategories());

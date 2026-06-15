@@ -7,10 +7,10 @@ class ApiService {
   static const String _edgeFunctionUrl =
       'https://masngvxdbxqrrreszjxv.supabase.co/functions/v1/smart-api';
 
-  /// Master switch for SSE streaming. Keep OFF until the streaming backend
-  /// (smart-api `stream:true`) is deployed — when off, `sendMessage()` is used
-  /// and the app behaves exactly as before. Flip to true to use `streamMessage()`.
-  static const bool useStreaming = false;
+  /// Master switch for SSE streaming. Backend smart-api streaming is live
+  /// (v50, contract-verified), so this is ON: chat uses `streamMessage()`.
+  /// Flip to false to fall back to the one-shot `sendMessage()` path.
+  static const bool useStreaming = true;
 
   /// ElevenLabs TTS key — injected at build time via
   /// `--dart-define=ELEVENLABS_API_KEY=...`. NEVER hardcode it: the previous
@@ -203,6 +203,13 @@ class ApiService {
     final streamedResponse = await request.send();
     if (streamedResponse.statusCode != 200) {
       final body = await streamedResponse.stream.bytesToString();
+      // Free-tier plans can't use library voices via the API → 402.
+      // Surface a clear, friendly message instead of a raw error dump.
+      if (streamedResponse.statusCode == 402) {
+        throw Exception(
+            'Voice playback needs a paid ElevenLabs plan — the free tier '
+            "can't use this voice.");
+      }
       throw Exception('TTS error ${streamedResponse.statusCode}: $body');
     }
     return await streamedResponse.stream.toBytes();
