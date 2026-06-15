@@ -56,12 +56,36 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } on AuthException catch (e) {
-      setState(() { _error = e.message; });
+      // AuthRetryableFetchException (network drop) is an AuthException whose
+      // message is a raw ClientException/SocketException — show friendly text.
+      setState(() {
+        _error = _isOfflineError(e) ? _kOfflineMessage : e.message;
+      });
     } catch (e) {
-      setState(() { _error = e.toString(); });
+      setState(() {
+        _error = _isOfflineError(e) ? _kOfflineMessage : e.toString();
+      });
     } finally {
       if (mounted) setState(() { _loading = false; });
     }
+  }
+
+  static const String _kOfflineMessage =
+      "You're offline. Check your internet connection and try again.";
+
+  /// Whether [e] is a connectivity failure rather than a credential/server
+  /// error (gotrue AuthRetryableFetchException, SocketException, ClientException).
+  bool _isOfflineError(Object e) {
+    final s = e.toString().toLowerCase();
+    return s.contains('authretryablefetchexception') ||
+        s.contains('socketexception') ||
+        s.contains('clientexception') ||
+        s.contains('failed host lookup') ||
+        s.contains('network is unreachable') ||
+        s.contains('connection closed') ||
+        s.contains('connection refused') ||
+        s.contains('connection reset') ||
+        s.contains('connection timed out');
   }
 
   @override

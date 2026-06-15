@@ -32,6 +32,11 @@ class _ChatScreenState extends State<ChatScreen> {
   StreamSubscription<ChatEvent>? _streamSub;
   String? _streamingText; // live assistant text being built; null when idle
   String? _toolChip; // current "working…" hint label, null when none
+  // Token deltas are accumulated here off the build path; a periodic timer
+  // flushes the buffer into _streamingText (one setState per frame-ish tick)
+  // instead of setState-per-token, which made the live render stutter.
+  String _streamBuffer = '';
+  Timer? _flushTimer;
 
   // Voice input
   final SpeechToText _speech = SpeechToText();
@@ -177,8 +182,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final completer = Completer<void>();
     setState(() {
       _streamingText = '';
+      _streamBuffer = '';
       _toolChip = null;
     });
+    _startStreamFlush();
 
     void finish() {
       if (!completer.isCompleted) completer.complete();
@@ -193,16 +200,15 @@ class _ChatScreenState extends State<ChatScreen> {
           case ChatEventType.start:
             break;
           case ChatEventType.token:
-            setState(() {
-              _toolChip = null; // answer is flowing — drop any tool chip
-              _streamingText = (_streamingText ?? '') + (event.text ?? '');
-            });
-            _maybeAutoScroll();
+            // Accumulate off the build path; the flush timer renders it. No
+            // setState here → no per-token rebuild stutter.
+            _streamBuffer += (event.text ?? '');
             break;
           case ChatEventType.turn:
             // Pre-tool "thinking" text isn't the answer — discard it. The real
             // answer is whatever streams after the last tool turn.
             if (event.stopReason == 'tool_use') {
+              _streamBuffer = '';
               setState(() => _streamingText = '');
             }
             break;
@@ -212,14 +218,16 @@ class _ChatScreenState extends State<ChatScreen> {
             }
             break;
           case ChatEventType.done:
+            _stopStreamFlush();
             final full = (event.message != null && event.message!.isNotEmpty)
                 ? event.message!
-                : (_streamingText ?? '');
+                : _streamBuffer;
             setState(() {
               if (full.trim().isNotEmpty) {
                 _messages.add(ChatMessage(text: full, isUser: false));
               }
               _streamingText = null;
+              _streamBuffer = '';
               _toolChip = null;
               _sending = false;
             });
@@ -227,8 +235,10 @@ class _ChatScreenState extends State<ChatScreen> {
             _afterReply(full, speak); // fire-and-forget TTS + reload
             break;
           case ChatEventType.error:
+            _stopStreamFlush();
             setState(() {
               _streamingText = null;
+              _streamBuffer = '';
               _toolChip = null;
               _messages.add(ChatMessage(
                   text: 'Error: ${event.error}', isUser: false, isError: true));
@@ -239,10 +249,12 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       },
       onError: (Object e) {
+        _stopStreamFlush();
         _handleSendError(e);
         if (mounted) {
           setState(() {
             _streamingText = null;
+            _streamBuffer = '';
             _toolChip = null;
             _sending = false;
           });
@@ -250,13 +262,15 @@ class _ChatScreenState extends State<ChatScreen> {
         finish();
       },
       onDone: () {
+        _stopStreamFlush();
         // Safety net: stream closed without an explicit done/error event.
         if (mounted && _sending) {
           setState(() {
-            if ((_streamingText ?? '').trim().isNotEmpty) {
-              _messages.add(ChatMessage(text: _streamingText!, isUser: false));
+            if (_streamBuffer.trim().isNotEmpty) {
+              _messages.add(ChatMessage(text: _streamBuffer, isUser: false));
             }
             _streamingText = null;
+            _streamBuffer = '';
             _toolChip = null;
             _sending = false;
           });
@@ -273,15 +287,17 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// Stop an in-flight stream (stop button). Keeps whatever text arrived so far.
   Future<void> _stopStreaming() async {
+    _stopStreamFlush();
     await _streamSub?.cancel();
     _streamSub = null;
     await _player.stop();
     if (mounted) {
       setState(() {
-        if ((_streamingText ?? '').trim().isNotEmpty) {
-          _messages.add(ChatMessage(text: _streamingText!, isUser: false));
+        if (_streamBuffer.trim().isNotEmpty) {
+          _messages.add(ChatMessage(text: _streamBuffer, isUser: false));
         }
         _streamingText = null;
+        _streamBuffer = '';
         _toolChip = null;
         _sending = false;
         _isSpeaking = false;
@@ -399,6 +415,27 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// Auto-scroll to the bottom on streamed tokens, but only if the user is
   /// already near the bottom — never yank them while they've scrolled up.
+  // ── Streaming flush (coalesces token deltas to ~30fps) ──
+  void _startStreamFlush() {
+    _flushTimer?.cancel();
+    _flushTimer =
+        Timer.periodic(const Duration(milliseconds: 33), (_) => _flushStream());
+  }
+
+  void _flushStream() {
+    if (!mounted || _streamingText == _streamBuffer) return;
+    setState(() {
+      _streamingText = _streamBuffer;
+      if (_streamBuffer.isNotEmpty) _toolChip = null;
+    });
+    _maybeAutoScroll();
+  }
+
+  void _stopStreamFlush() {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+  }
+
   void _maybeAutoScroll() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
@@ -714,6 +751,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _flushTimer?.cancel();
     _streamSub?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
@@ -973,8 +1011,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final streaming = _streamingText;
     if (streaming != null && streaming.isNotEmpty) {
+      // No entrance animation while streaming — the bubble updates many times
+      // as text grows; replaying the fade/translate each tick reads as jank.
       return _buildMessageBubble(
-          ChatMessage(text: streaming, isUser: false), theme);
+          ChatMessage(text: streaming, isUser: false), theme,
+          animate: false);
     }
 
     return const Padding(
@@ -993,7 +1034,8 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(ChatMessage msg, ThemeData theme) {
+  Widget _buildMessageBubble(ChatMessage msg, ThemeData theme,
+      {bool animate = true}) {
     final scheme = theme.colorScheme;
     final radius = BorderRadius.only(
       topLeft: const Radius.circular(AppStyle.rBubble),
@@ -1035,28 +1077,33 @@ class _ChatScreenState extends State<ChatScreen> {
       textColor = scheme.onSurface;
     }
 
+    final bubble = Container(
+      margin: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      constraints:
+          BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
+      decoration: decoration,
+      child: Text(
+        msg.text,
+        style: TextStyle(color: textColor, fontSize: 15, height: 1.42),
+      ),
+    );
+
     return Align(
       alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: TweenAnimationBuilder<double>(
-        duration: AppStyle.med,
-        curve: Curves.easeOutCubic,
-        tween: Tween(begin: 0, end: 1),
-        builder: (context, t, child) => Opacity(
-          opacity: t,
-          child: Transform.translate(offset: Offset(0, (1 - t) * 8), child: child),
-        ),
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 5),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          constraints:
-              BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
-          decoration: decoration,
-          child: Text(
-            msg.text,
-            style: TextStyle(color: textColor, fontSize: 15, height: 1.42),
-          ),
-        ),
-      ),
+      child: animate
+          ? TweenAnimationBuilder<double>(
+              duration: AppStyle.med,
+              curve: Curves.easeOutCubic,
+              tween: Tween(begin: 0, end: 1),
+              builder: (context, t, child) => Opacity(
+                opacity: t,
+                child: Transform.translate(
+                    offset: Offset(0, (1 - t) * 8), child: child),
+              ),
+              child: bubble,
+            )
+          : bubble,
     );
   }
 }
