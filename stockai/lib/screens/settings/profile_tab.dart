@@ -119,24 +119,21 @@ class _VoiceSection extends StatefulWidget {
 }
 
 class _VoiceSectionState extends State<_VoiceSection> {
+  // Curated shortlist (ai, API-verified premade + free-tier safe). Eric is the
+  // default per QA "voice too generic".
   static const _voices = [
-    {'id': 'EXAVITQu4vr4xnSDxMaL', 'name': 'Sarah — Female, Mature'},
-    {'id': 'FGY2WhTYpPnrIDTdsKH5', 'name': 'Laura — Female, Quirky'},
-    {'id': 'Xb7hH8MSUJpSbSDYk0k2', 'name': 'Alice — Female, Clear'},
-    {'id': 'XrExE9yKIg1WjnnlVkGX', 'name': 'Matilda — Female, Professional'},
-    {'id': 'cgSgspJ2msm6clMCkdW9', 'name': 'Jessica — Female, Playful'},
-    {'id': 'pFZP5JQG7iQjIQuC4Bku', 'name': 'Lily — Female, Velvety'},
-    {'id': 'nPczCjzI2devNBz1zQrb', 'name': 'Brian — Male, Deep'},
-    {'id': 'CwhRBWXzGAHq8TQ4Fs17', 'name': 'Roger — Male, Laid-Back'},
-    {'id': 'IKne3meq5aSn9XLyUdCD', 'name': 'Charlie — Male, Confident'},
-    {'id': 'TX3LPaxmHKxFdv7VOQHJ', 'name': 'Liam — Male, Energetic'},
-    {'id': 'onwK4e9ZLuTAKqWW03F9', 'name': 'Daniel — Male, Broadcaster'},
-    {'id': 'pNInz6obpgDQGcFmaJgB', 'name': 'Adam — Male, Firm'},
+    {'id': 'cjVigY5qzO86Huf0OWal', 'name': 'Eric — Smooth & Trustworthy'},
+    {'id': 'cgSgspJ2msm6clMCkdW9', 'name': 'Jessica — Playful & Bright'},
+    {'id': 'JBFqnCBsd6RMkjVDRZzb', 'name': 'George — British Storyteller'},
+    {'id': 'nPczCjzI2devNBz1zQrb', 'name': 'Brian — Deep & Resonant'},
+    {'id': 'IKne3meq5aSn9XLyUdCD', 'name': 'Charlie — Confident & Energetic'},
+    {'id': 'N2lVS1w4EtoT3dr4eOWO', 'name': 'Callum — Husky & Mischievous'},
+    {'id': 'SAz9YHcvj6GT2YYXdXww', 'name': 'River — Relaxed & Neutral'},
   ];
 
   final _supabaseService = SupabaseService();
-  String _selectedVoiceId = 'EXAVITQu4vr4xnSDxMaL'; // Sarah — free tier
-  double _stability = 0.5;
+  String _selectedVoiceId = 'cjVigY5qzO86Huf0OWal'; // Eric — premade, free tier
+  double _stability = 0.4;
   double _similarityBoost = 0.75;
   bool _loading = true;
   bool _saving = false;
@@ -152,7 +149,12 @@ class _VoiceSectionState extends State<_VoiceSection> {
     if (!mounted) return;
     setState(() {
       final v = settings['tts_voice_id'];
-      if (v != null && v.isNotEmpty) _selectedVoiceId = v;
+      // Only honor a saved voice if it's still in the curated shortlist —
+      // otherwise the Dropdown would assert (no matching item). A previously
+      // saved voice that was dropped (e.g. Sarah) falls back to the default.
+      if (v != null && v.isNotEmpty && _voices.any((e) => e['id'] == v)) {
+        _selectedVoiceId = v;
+      }
       final stab = double.tryParse(settings['tts_stability'] ?? '');
       if (stab != null) _stability = stab.clamp(0.0, 1.0);
       final sim = double.tryParse(settings['tts_similarity_boost'] ?? '');

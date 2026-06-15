@@ -193,9 +193,12 @@ class ApiService {
 
   Future<Uint8List> synthesizeSpeech(
     String text, {
-    String voiceId = 'EXAVITQu4vr4xnSDxMaL', // Sarah — premade, free tier
-    double stability = 0.5,
+    // Eric — smooth, trustworthy American voice (premade, free-tier safe).
+    // Replaces the flat-sounding Sarah default per QA "voice too generic".
+    String voiceId = 'cjVigY5qzO86Huf0OWal',
+    double stability = 0.4, // a touch lower → more expressive/characterful
     double similarityBoost = 0.75,
+    double speed = 1.1, // QA: default read was too slow (range ~0.7–1.2)
   }) async {
     if (_elevenLabsApiKey.isEmpty) {
       throw Exception(
@@ -218,6 +221,7 @@ class ApiService {
       'voice_settings': {
         'stability': stability,
         'similarity_boost': similarityBoost,
+        'speed': speed,
       },
     });
 

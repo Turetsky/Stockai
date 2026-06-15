@@ -49,8 +49,10 @@ class _ChatScreenState extends State<ChatScreen> {
   // Default to a free-tier *premade* voice (Sarah). The old default (Rachel,
   // 21m00…) is a library voice → 402 on free plans. A user's saved tts_voice_id
   // still overrides this on load.
-  String _ttsVoiceId = 'EXAVITQu4vr4xnSDxMaL'; // ElevenLabs Sarah (premade, free)
-  double _ttsStability = 0.5;
+  // Eric — smooth, trustworthy premade voice (free-tier safe). Replaces Sarah
+  // per QA "voice too generic". A user's saved tts_voice_id still overrides.
+  String _ttsVoiceId = 'cjVigY5qzO86Huf0OWal';
+  double _ttsStability = 0.4; // lower → more expressive/characterful
   double _ttsSimilarityBoost = 0.75;
   bool _ttsWarned = false; // show a TTS-failure notice at most once per session
 

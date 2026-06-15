@@ -34,25 +34,28 @@ class AppStyle {
   static Color gradientStart = gradientStartDefault;
   static Color gradientEnd = gradientEndDefault;
 
-  /// INTERIM companion-stop derivation for app-side seed/preset changes.
+  /// Companion-stop derivation for a single chosen color (custom edits).
   ///
-  /// The app's Settings has a single "Primary" picker, but the gradient needs
-  /// two stops. This derives the END stop from a chosen START using the same
-  /// relationship the default pair has (#8B7BFF → #667EEA): hue −18°, sat ×0.80,
-  /// lightness ×0.90. Returns the literal #667EEA default when given the default
-  /// start, so the no-change case stays pixel-identical to web.
+  /// The app's Settings has ONE "Primary" picker but the gradient needs two
+  /// stops. This derives the END from the START using the formula agreed with
+  /// the web team for custom edits, so an app custom color and a web custom
+  /// color (with web's "link end to start" mode) write the same two keys:
+  ///   end = HSL(hue −24°, sat ×0.85 clamp[0.40,1.0], light −0.02 clamp[0,0.85])
+  /// The default start (#8B7BFF) is special-cased to the literal #667EEA so the
+  /// no-change case stays pixel-identical to web.
   ///
-  /// TODO(parity): replace with web's exact per-preset start/end pairs +
-  /// custom-edit formula once site confirms, so app writes match web writes.
+  /// NOTE: built-in presets should instead write web's exact per-preset
+  /// start/end pairs verbatim (pending team-lead sign-off) — this derivation is
+  /// for arbitrary custom colors only.
   static Color deriveGradientEnd(Color start) {
     if (start.toARGB32() == gradientStartDefault.toARGB32()) {
       return gradientEndDefault;
     }
     final hsl = HSLColor.fromColor(start);
     return hsl
-        .withHue((hsl.hue - 18 + 360) % 360)
-        .withSaturation((hsl.saturation * 0.80).clamp(0.0, 1.0))
-        .withLightness((hsl.lightness * 0.90).clamp(0.0, 1.0))
+        .withHue((hsl.hue - 24 + 360) % 360)
+        .withSaturation((hsl.saturation * 0.85).clamp(0.40, 1.0))
+        .withLightness((hsl.lightness - 0.02).clamp(0.0, 0.85))
         .toColor();
   }
   // Status colors
