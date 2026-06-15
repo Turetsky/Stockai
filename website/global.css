@@ -11,14 +11,16 @@ html {
 }
 
 :root {
-    --clr-start:          #667eea;
-    --clr-end:            #764ba2;
-    --clr-accent:         #667eea;
-    --clr-bg:             #eef0f6;
-    --clr-card:           #ffffff;
-    --clr-text-primary:   #1a1a2e;
-    --clr-text-secondary: #555;
-    --clr-text-label:     #888;
+    /* Default theme = StockAI dark-violet brand (matches about/landing).
+       Per-user themes override these via theme-init.js / settings. */
+    --clr-start:          #8b7bff;
+    --clr-end:            #667eea;
+    --clr-accent:         #8b7bff;
+    --clr-bg:             #07070e;
+    --clr-card:           #0d0d18;
+    --clr-text-primary:   #ecedf6;
+    --clr-text-secondary: #9a9bb4;
+    --clr-text-label:     #8a8ba2;
     --card-radius:        12px;
     --font-base:          15px;
     --shadow-sm: 0 2px 8px rgba(102,126,234,0.10);

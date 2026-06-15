@@ -12,6 +12,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 // ── Theme presets ──
 const PRESETS = [
+    { name: 'Midnight Violet',   start: '#8b7bff', end: '#667eea', accent: '#8b7bff', bg: '#07070e', card: '#0d0d18', text: '#ecedf6',
+      sidebarBg: '#0d0d18', sidebarHeader: '#07070e', sidebarText: '#9a9bb4', sidebarTitle: '#ecedf6' },
     { name: 'Default Purple',    start: '#667eea', end: '#764ba2', accent: '#667eea', bg: '#f0f1f8', card: '#ffffff', text: '#1a1a1a',
       sidebarBg: '#1e293b', sidebarHeader: '#0f172a', sidebarText: '#94a3b8', sidebarTitle: '#f1f5f9' },
     { name: 'Dark Mode',         start: '#1e293b', end: '#334155', accent: '#60a5fa', bg: '#0f172a', card: '#1e293b', text: '#f1f5f9',

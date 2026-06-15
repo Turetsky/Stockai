@@ -7,18 +7,20 @@
 
 :root {
   --dash-card-min: 280px;
-  --d-ink:     #07070e;
-  --d-ink-2:   #0d0d18;
+  /* colours derive from the active theme (--clr-*); dark-violet fallbacks
+     so the page looks right even before any theme is applied */
+  --d-ink:     var(--clr-bg, #07070e);
+  --d-ink-2:   var(--clr-card, #0d0d18);
   --d-panel:   rgba(255, 255, 255, 0.035);
   --d-panel-2: rgba(255, 255, 255, 0.05);
   --d-line:    rgba(255, 255, 255, 0.09);
   --d-line-2:  rgba(255, 255, 255, 0.15);
-  --d-text:    #ecedf6;
-  --d-muted:   #9a9bb4;
-  --d-faint:   #62637a;
-  --d-violet:  #8b7bff;
+  --d-text:    var(--clr-text-primary, #ecedf6);
+  --d-muted:   var(--clr-text-secondary, #9a9bb4);
+  --d-faint:   #8a8ba2;
+  --d-violet:  var(--clr-accent, #8b7bff);
   --d-cyan:    #59d6e6;
-  --d-grad:    linear-gradient(110deg, #8b7bff 0%, #b06ad6 55%, #667eea 100%);
+  --d-grad:    linear-gradient(110deg, var(--clr-start, #8b7bff) 0%, var(--clr-end, #667eea) 100%);
   --d-display: "Bricolage Grotesque", Georgia, serif;
   --d-body:    "Manrope", -apple-system, BlinkMacSystemFont, sans-serif;
   --d-mono:    "JetBrains Mono", ui-monospace, monospace;
