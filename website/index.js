@@ -62,9 +62,11 @@ async function loadInventoryCards() {
         allTables = (data || []).map(table => ({
             ...table,
             _count: 0,
-            _qty: 0
+            _qty: 0,
+            _fields: 0
         }));
 
+        await loadFieldCounts();
         await loadCounts();
         applySortAndFilter();
     } catch (err) {
@@ -95,6 +97,32 @@ async function loadCounts() {
         } catch (err) {
             console.error(`Error loading counts for ${table.table_name}:`, err);
         }
+    }
+}
+
+// Count each category's fields from field_definitions (the real source — the
+// `fields` column on table_definitions isn't populated). One query for all the
+// user's field rows, then tally per table_name.
+async function loadFieldCounts() {
+    const db = window.db;
+    try {
+        const { data, error } = await db
+            .from('field_definitions')
+            .select('table_name')
+            .eq('user_id', window.currentUser?.id);
+
+        if (error || !data) return;
+
+        const counts = {};
+        data.forEach(row => {
+            counts[row.table_name] = (counts[row.table_name] || 0) + 1;
+        });
+
+        allTables.forEach(table => {
+            table._fields = counts[table.table_name] || 0;
+        });
+    } catch (err) {
+        console.error('Error loading field counts:', err);
     }
 }
 
@@ -152,7 +180,7 @@ function renderCards(tables) {
         <div class="inventory-card" onclick="navigateToCategory('${table.table_name}')">
             <span class="card-icon">${table.icon || '📦'}</span>
             <span class="card-title">${escapeHtml(table.display_name)}</span>
-            <span class="card-desc">${table.fields?.length || 0} fields</span>
+            <span class="card-desc">${table._fields} ${table._fields === 1 ? 'field' : 'fields'}</span>
             <div class="card-stats">
                 <div class="stat-item">
                     <div class="stat-label">Items</div>
