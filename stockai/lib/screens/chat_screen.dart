@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -25,6 +26,11 @@ class _ChatScreenState extends State<ChatScreen> {
   final _supabaseService = SupabaseService();
   final List<ChatMessage> _messages = [];
   bool _sending = false;
+
+  // Streaming state (used when ApiService.useStreaming is true)
+  StreamSubscription<ChatEvent>? _streamSub;
+  String? _streamingText; // live assistant text being built; null when idle
+  String? _toolChip; // current "working…" hint label, null when none
 
   // Voice input
   final SpeechToText _speech = SpeechToText();
@@ -120,53 +126,243 @@ class _ChatScreenState extends State<ChatScreen> {
             })
         .toList();
 
+    if (ApiService.useStreaming) {
+      await _streamReply(text, historyMessages, concise: concise, speak: speak);
+    } else {
+      await _sendNonStreaming(text, historyMessages,
+          concise: concise, speak: speak);
+    }
+  }
+
+  /// Original one-shot path: await the full reply, then add it as one bubble.
+  Future<void> _sendNonStreaming(
+    String text,
+    List<Map<String, String>> history, {
+    required bool concise,
+    required bool speak,
+  }) async {
     try {
       final response = await _apiService.sendMessage(
         text,
         concise: concise,
-        history: historyMessages,
+        history: history,
       );
       if (mounted) {
-        setState(() {
-          _messages.add(ChatMessage(text: response, isUser: false));
-        });
+        setState(() => _messages.add(ChatMessage(text: response, isUser: false)));
       }
-      if (speak) {
-        try {
-          final audio = await _apiService.synthesizeSpeech(
-            response,
-            voiceId: _ttsVoiceId,
-            stability: _ttsStability,
-            similarityBoost: _ttsSimilarityBoost,
-          );
-          await _player.play(BytesSource(audio));
-        } catch (_) {}
-      }
-      // Reload categories + theme in case the AI changed them
-      await loadThemeFromSupabase();
-      if (mounted) {
-        setState(() {
-          _loadCategories();
-        });
-      }
+      await _afterReply(response, speak);
     } catch (e) {
-      if (mounted) {
-        if (e is SessionExpiredException) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const LoginScreen()),
-            (_) => false,
-          );
-        } else {
-          setState(() {
-            _messages.add(
-                ChatMessage(text: 'Error: ${e.toString()}', isUser: false, isError: true));
-          });
-        }
-      }
+      _handleSendError(e);
     } finally {
       if (mounted) setState(() => _sending = false);
       _scrollToBottom();
     }
+  }
+
+  /// Streaming path: consume the SSE [ChatEvent] stream, building the assistant
+  /// bubble live. Applies the contract's reset rule (clear bubble on a
+  /// `turn` with stop_reason "tool_use") and shows a "working…" chip during
+  /// tool calls so the reset is never visible as a flash of vanishing text.
+  Future<void> _streamReply(
+    String text,
+    List<Map<String, String>> history, {
+    required bool concise,
+    required bool speak,
+  }) async {
+    final completer = Completer<void>();
+    setState(() {
+      _streamingText = '';
+      _toolChip = null;
+    });
+
+    void finish() {
+      if (!completer.isCompleted) completer.complete();
+    }
+
+    _streamSub = _apiService
+        .streamMessage(text, concise: concise, history: history)
+        .listen(
+      (event) {
+        if (!mounted) return;
+        switch (event.type) {
+          case ChatEventType.start:
+            break;
+          case ChatEventType.token:
+            setState(() {
+              _toolChip = null; // answer is flowing — drop any tool chip
+              _streamingText = (_streamingText ?? '') + (event.text ?? '');
+            });
+            _maybeAutoScroll();
+            break;
+          case ChatEventType.turn:
+            // Pre-tool "thinking" text isn't the answer — discard it. The real
+            // answer is whatever streams after the last tool turn.
+            if (event.stopReason == 'tool_use') {
+              setState(() => _streamingText = '');
+            }
+            break;
+          case ChatEventType.tool:
+            if (event.toolStatus == 'running') {
+              setState(() => _toolChip = _toolLabel(event.toolName));
+            }
+            break;
+          case ChatEventType.done:
+            final full = (event.message != null && event.message!.isNotEmpty)
+                ? event.message!
+                : (_streamingText ?? '');
+            setState(() {
+              if (full.trim().isNotEmpty) {
+                _messages.add(ChatMessage(text: full, isUser: false));
+              }
+              _streamingText = null;
+              _toolChip = null;
+              _sending = false;
+            });
+            _scrollToBottom();
+            _afterReply(full, speak); // fire-and-forget TTS + reload
+            break;
+          case ChatEventType.error:
+            setState(() {
+              _streamingText = null;
+              _toolChip = null;
+              _messages.add(ChatMessage(
+                  text: 'Error: ${event.error}', isUser: false, isError: true));
+              _sending = false;
+            });
+            _scrollToBottom();
+            break;
+        }
+      },
+      onError: (Object e) {
+        _handleSendError(e);
+        if (mounted) {
+          setState(() {
+            _streamingText = null;
+            _toolChip = null;
+            _sending = false;
+          });
+        }
+        finish();
+      },
+      onDone: () {
+        // Safety net: stream closed without an explicit done/error event.
+        if (mounted && _sending) {
+          setState(() {
+            if ((_streamingText ?? '').trim().isNotEmpty) {
+              _messages.add(ChatMessage(text: _streamingText!, isUser: false));
+            }
+            _streamingText = null;
+            _toolChip = null;
+            _sending = false;
+          });
+          _scrollToBottom();
+        }
+        _streamSub = null;
+        finish();
+      },
+      cancelOnError: true,
+    );
+
+    return completer.future;
+  }
+
+  /// Stop an in-flight stream (stop button). Keeps whatever text arrived so far.
+  Future<void> _stopStreaming() async {
+    await _streamSub?.cancel();
+    _streamSub = null;
+    await _player.stop();
+    if (mounted) {
+      setState(() {
+        if ((_streamingText ?? '').trim().isNotEmpty) {
+          _messages.add(ChatMessage(text: _streamingText!, isUser: false));
+        }
+        _streamingText = null;
+        _toolChip = null;
+        _sending = false;
+        _isSpeaking = false;
+      });
+    }
+  }
+
+  /// Post-reply work shared by both paths: speak the answer (if requested) and
+  /// reload theme + categories in case the AI changed them.
+  Future<void> _afterReply(String fullText, bool speak) async {
+    if (speak && fullText.trim().isNotEmpty) {
+      try {
+        final audio = await _apiService.synthesizeSpeech(
+          fullText,
+          voiceId: _ttsVoiceId,
+          stability: _ttsStability,
+          similarityBoost: _ttsSimilarityBoost,
+        );
+        await _player.play(BytesSource(audio));
+      } catch (_) {}
+    }
+    await loadThemeFromSupabase();
+    if (mounted) setState(() => _loadCategories());
+  }
+
+  void _handleSendError(Object e) {
+    if (!mounted) return;
+    if (e is SessionExpiredException) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
+      );
+    } else {
+      setState(() {
+        _messages.add(ChatMessage(
+            text: 'Error: ${e.toString()}', isUser: false, isError: true));
+      });
+    }
+  }
+
+  /// Maps a raw tool name to a friendly "working…" chip label.
+  String _toolLabel(String? name) {
+    switch (name) {
+      case 'list_categories':
+        return 'Looking through your categories…';
+      case 'get_items':
+        return 'Checking your inventory…';
+      case 'get_fields':
+        return 'Reading the category setup…';
+      case 'create_category':
+        return 'Creating the category…';
+      case 'rename_category':
+        return 'Renaming the category…';
+      case 'delete_category':
+        return 'Deleting the category…';
+      case 'add_field':
+        return 'Adding the field…';
+      case 'remove_field':
+        return 'Removing the field…';
+      case 'rename_field':
+        return 'Updating the field…';
+      case 'upsert_item':
+        return 'Saving the item…';
+      case 'delete_item':
+        return 'Deleting the item…';
+      case 'get_ui_settings':
+        return 'Checking your settings…';
+      case 'set_ui_setting':
+        return 'Updating your settings…';
+      case 'set_layout':
+        return 'Adjusting the layout…';
+      default:
+        return 'Working…';
+    }
+  }
+
+  /// Auto-scroll to the bottom on streamed tokens, but only if the user is
+  /// already near the bottom — never yank them while they've scrolled up.
+  void _maybeAutoScroll() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      final pos = _scrollController.position;
+      if (pos.maxScrollExtent - pos.pixels < 160) {
+        _scrollController.jumpTo(pos.maxScrollExtent);
+      }
+    });
   }
 
   Future<void> _toggleListening() async {
@@ -398,6 +594,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _streamSub?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     _inputFocusNode.dispose();
@@ -480,22 +677,7 @@ class _ChatScreenState extends State<ChatScreen> {
               itemCount: _messages.length + (_sending ? 1 : 0),
               itemBuilder: (context, index) {
                 if (index == _messages.length && _sending) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2)),
-                        SizedBox(width: 12),
-                        Text('Thinking...',
-                            style: TextStyle(
-                                color: Colors.grey,
-                                fontStyle: FontStyle.italic)),
-                      ],
-                    ),
-                  );
+                  return _buildLiveIndicator(theme);
                 }
                 return _buildMessageBubble(_messages[index], theme);
               },
@@ -558,15 +740,15 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  if (_isSpeaking)
+                  if (_isSpeaking || (_sending && _streamSub != null))
                     IconButton.filled(
-                      onPressed: _stopSpeaking,
+                      onPressed: _isSpeaking ? _stopSpeaking : _stopStreaming,
                       style: IconButton.styleFrom(
                         backgroundColor: theme.colorScheme.error,
                         foregroundColor: theme.colorScheme.onError,
                       ),
                       icon: const Icon(Icons.stop_rounded),
-                      tooltip: 'Stop speaking',
+                      tooltip: _isSpeaking ? 'Stop speaking' : 'Stop',
                     )
                   else
                     IconButton.filled(
@@ -577,6 +759,66 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// The trailing item shown while a reply is in flight: a tool "working…"
+  /// chip, the live streaming bubble, or the default "Thinking…" indicator
+  /// (the last is also what the non-streaming path shows).
+  Widget _buildLiveIndicator(ThemeData theme) {
+    if (_toolChip != null) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: theme.colorScheme.primary),
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  _toolChip!,
+                  style: TextStyle(
+                      fontStyle: FontStyle.italic,
+                      color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final streaming = _streamingText;
+    if (streaming != null && streaming.isNotEmpty) {
+      return _buildMessageBubble(
+          ChatMessage(text: streaming, isUser: false), theme);
+    }
+
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2)),
+          SizedBox(width: 12),
+          Text('Thinking...',
+              style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
         ],
       ),
     );

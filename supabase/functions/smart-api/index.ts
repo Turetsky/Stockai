@@ -793,6 +793,200 @@ async function runTool(
 }
 
 // ============================================================================
+// 3b. STREAMING EXECUTOR — runs the tool loop with Anthropic stream:true and
+//      pipes Server-Sent Events to the client. Contract: docs/ai-streaming-contract.md
+//      Opt-in only ({ stream: true }); the non-streaming path is unaffected.
+// ============================================================================
+function streamAiResponse(opts: {
+  ANTHROPIC_API_KEY: string;
+  systemPrompt: string;
+  messages: Array<{ role: string; content: unknown }>;
+  userId: string;
+  adminDb: ReturnType<typeof createClient>;
+  userDb: ReturnType<typeof createClient>;
+}): Response {
+  const { ANTHROPIC_API_KEY, systemPrompt, messages, userId, adminDb, userDb } = opts;
+  const enc = new TextEncoder();
+
+  let closed = false;
+  let keepAlive: ReturnType<typeof setInterval> | undefined;
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: string, data: unknown) => {
+        if (closed) return;
+        controller.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      };
+      const finish = () => {
+        if (closed) return;
+        closed = true;
+        if (keepAlive !== undefined) clearInterval(keepAlive);
+        try { controller.close(); } catch (_) { /* already closed */ }
+      };
+
+      // Heartbeat so proxy/edge idle timeouts don't kill long tool runs.
+      keepAlive = setInterval(() => {
+        if (!closed) controller.enqueue(enc.encode(`: keep-alive\n\n`));
+      }, 15000);
+
+      try {
+        send('start', {});
+        let anyRefresh = false;
+        let finalText  = '';
+
+        // Tool-use loop (up to 8 iterations), each Anthropic call streamed.
+        for (let i = 0; i < 8; i++) {
+          const resp = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type':      'application/json',
+              'x-api-key':         ANTHROPIC_API_KEY,
+              'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+              model:      'claude-haiku-4-5-20251001',
+              max_tokens: 1500,
+              system:     systemPrompt,
+              tools,
+              messages,
+              stream:     true,
+            }),
+          });
+
+          if (!resp.ok || !resp.body) {
+            const errBody = await resp.text().catch(() => '');
+            send('error', { error: `Claude API error ${resp.status}: ${errBody}` });
+            finish();
+            return;
+          }
+
+          // Parse Anthropic's SSE; reconstruct content blocks for message history.
+          const reader  = resp.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = '';
+          const blocks: Array<{ type: string; text?: string; id?: string; name?: string; inputJson?: string }> = [];
+          let stopReason: string | null = null;
+          let turnText = '';   // text of THIS turn only (final answer = last turn's text)
+
+          let streamDone = false;
+          while (!streamDone) {
+            const { value, done: rdDone } = await reader.read();
+            if (rdDone) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split('\n');
+            buf = lines.pop() ?? '';
+            for (const line of lines) {
+              const t = line.trimStart();
+              if (!t.startsWith('data:')) continue;
+              const payload = t.slice(5).trim();
+              if (!payload) continue;
+              let evt: Record<string, any>;
+              try { evt = JSON.parse(payload); } catch (_) { continue; }
+
+              switch (evt.type) {
+                case 'content_block_start': {
+                  const cb = evt.content_block ?? {};
+                  if (cb.type === 'text') {
+                    blocks[evt.index] = { type: 'text', text: '' };
+                  } else if (cb.type === 'tool_use') {
+                    blocks[evt.index] = { type: 'tool_use', id: cb.id, name: cb.name, inputJson: '' };
+                  }
+                  break;
+                }
+                case 'content_block_delta': {
+                  const d   = evt.delta ?? {};
+                  const blk = blocks[evt.index];
+                  if (d.type === 'text_delta') {
+                    if (blk) blk.text = (blk.text ?? '') + d.text;
+                    turnText += d.text;
+                    send('token', { text: d.text });
+                  } else if (d.type === 'input_json_delta') {
+                    if (blk) blk.inputJson = (blk.inputJson ?? '') + d.partial_json;
+                  }
+                  break;
+                }
+                case 'message_delta': {
+                  if (evt.delta?.stop_reason) stopReason = evt.delta.stop_reason;
+                  break;
+                }
+                case 'message_stop': {
+                  streamDone = true;
+                  break;
+                }
+                // message_start / ping / content_block_stop → ignored
+              }
+            }
+          }
+
+          // Rebuild the assistant message (text + tool_use blocks) for the loop.
+          const assistantContent: any[] = [];
+          for (const blk of blocks) {
+            if (!blk) continue;
+            if (blk.type === 'text') {
+              assistantContent.push({ type: 'text', text: blk.text ?? '' });
+            } else if (blk.type === 'tool_use') {
+              let input: unknown = {};
+              try { input = blk.inputJson ? JSON.parse(blk.inputJson) : {}; } catch (_) { input = {}; }
+              assistantContent.push({ type: 'tool_use', id: blk.id, name: blk.name, input });
+            }
+          }
+          messages.push({ role: 'assistant', content: assistantContent });
+
+          send('turn', { index: i, stop_reason: stopReason ?? 'end_turn' });
+
+          if (stopReason === 'tool_use') {
+            const toolResults: any[] = [];
+            for (const blk of blocks) {
+              if (!blk || blk.type !== 'tool_use') continue;
+              let input: Record<string, unknown> = {};
+              try { input = blk.inputJson ? JSON.parse(blk.inputJson) : {}; } catch (_) { input = {}; }
+              send('tool', { name: blk.name, status: 'running' });
+              const { result, refresh } = await runTool(blk.name!, input, userId, adminDb, userDb);
+              if (refresh) anyRefresh = true;
+              send('tool', { name: blk.name, status: result.startsWith('❌') ? 'error' : 'done' });
+              toolResults.push({ type: 'tool_result', tool_use_id: blk.id, content: result });
+            }
+            messages.push({ role: 'user', content: toolResults });
+            continue;  // next turn; client discards this turn's text via the reset rule
+          }
+
+          // Terminal turn (end_turn / other) — its text is the final answer.
+          finalText = turnText;
+          break;
+        }
+
+        const navMatch = finalText.match(
+          /navigate(?:\s+to)?\s+["']?(inventory\.html\?table=[\w]+)["']?/i,
+        );
+        send('done', {
+          message:  finalText || 'Done.',
+          refresh:  anyRefresh,
+          navigate: navMatch ? navMatch[1] : null,
+        });
+        finish();
+      } catch (err) {
+        send('error', { error: (err as Error).message });
+        finish();
+      }
+    },
+    cancel() {
+      // Client disconnected — stop the heartbeat.
+      closed = true;
+      if (keepAlive !== undefined) clearInterval(keepAlive);
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      ...corsHeaders,
+      'Content-Type':  'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      'Connection':    'keep-alive',
+    },
+  });
+}
+
+// ============================================================================
 // 4. MAIN REQUEST HANDLER — serves every incoming POST
 // ============================================================================
 Deno.serve(async (req) => {
@@ -956,6 +1150,14 @@ CRITICAL — WHEN INSERTING DATA (upsert_item), FIELD ROLE IS DETERMINED BY SORT
     const messages: Array<{ role: string; content: unknown }> = [
       { role: 'user', content: userMessage },
     ];
+
+    /* ── Streaming mode (opt-in via { stream: true }) ──────────
+       Additive: the non-streaming loop below is left intact. The tool-use loop
+       runs as normal but each Anthropic call uses stream:true and chunks are
+       piped to the client as SSE. See docs/ai-streaming-contract.md. */
+    if (body.stream === true) {
+      return streamAiResponse({ ANTHROPIC_API_KEY, systemPrompt, messages, userId, adminDb, userDb });
+    }
 
     let finalText  = '';
     let anyRefresh = false;
