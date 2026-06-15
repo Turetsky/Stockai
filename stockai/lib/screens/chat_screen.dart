@@ -93,17 +93,22 @@ class _ChatScreenState extends State<ChatScreen> {
     _player.onPlayerStateChanged.listen((state) {
       if (mounted) setState(() => _isSpeaking = state == PlayerState.playing);
     });
-    // Load voice + TTS params
-    _supabaseService.getUiSettings().then((settings) {
-      if (!mounted) return;
-      setState(() {
-        final v = settings['tts_voice_id'];
-        if (v != null && v.isNotEmpty) _ttsVoiceId = v;
-        final stab = double.tryParse(settings['tts_stability'] ?? '');
-        if (stab != null) _ttsStability = stab.clamp(0.0, 1.0);
-        final sim = double.tryParse(settings['tts_similarity_boost'] ?? '');
-        if (sim != null) _ttsSimilarityBoost = sim.clamp(0.0, 1.0);
-      });
+    _loadTtsSettings(); // initial load of voice + TTS params
+  }
+
+  /// (Re)load the current voice + TTS params from ui_settings. Called at init
+  /// AND before each spoken reply, so a voice change made in Settings takes
+  /// effect immediately instead of only after an app restart (stale cache bug).
+  Future<void> _loadTtsSettings() async {
+    final settings = await _supabaseService.getUiSettings();
+    if (!mounted) return;
+    setState(() {
+      final v = settings['tts_voice_id'];
+      if (v != null && v.isNotEmpty) _ttsVoiceId = v;
+      final stab = double.tryParse(settings['tts_stability'] ?? '');
+      if (stab != null) _ttsStability = stab.clamp(0.0, 1.0);
+      final sim = double.tryParse(settings['tts_similarity_boost'] ?? '');
+      if (sim != null) _ttsSimilarityBoost = sim.clamp(0.0, 1.0);
     });
   }
 
@@ -311,6 +316,8 @@ class _ChatScreenState extends State<ChatScreen> {
   /// reload theme + categories in case the AI changed them.
   Future<void> _afterReply(String fullText, bool speak) async {
     if (speak && fullText.trim().isNotEmpty) {
+      // Pick up any voice/param change made in Settings since init.
+      await _loadTtsSettings();
       try {
         final audio = await _apiService.synthesizeSpeech(
           fullText,
