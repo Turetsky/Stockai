@@ -18,7 +18,8 @@ project needs a redo"; ended with web + backend + app all shipped.
   no more logout on network blip + friendly offline message on chat & login),
   theme-dynamic look (#26), working TTS (Eric voice @1.1x + curated picker),
   AppBar theming fix (#15).
-  Latest install: appdistribution.firebase.google.com/testerapps/1:494810929579:android:798b5dc63ed5efba231aee/releases/6e8e0aviqb630
+  Latest install (commit **f8e9e14**, incl. #36 voice-change-refresh): appdistribution.firebase.google.com/testerapps/1:494810929579:android:798b5dc63ed5efba231aee/releases/7dmpkenlqu5po
+  (installed + launches clean; FULL on-device re-QA of this build is the one carryover.)
 
 ## Security incident (resolved)
 - ElevenLabs API key was hardcoded in `api_service.dart` → leaked on public GitHub
