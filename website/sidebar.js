@@ -84,7 +84,6 @@
     .sidebar-logo {
       font-size: 28px;
       flex-shrink: 0;
-      color: var(--clr-accent, #8b7bff);
       animation: sidebar-logo-glow 3.4s ease-in-out infinite;
     }
     @keyframes sidebar-logo-glow {
